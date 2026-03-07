@@ -1,0 +1,75 @@
+# ============================================================
+# Repo-local Codex execution policy rules
+#
+# Notes:
+# - Exec policy governs commands Codex wants to run *outside* the sandbox.
+# - Decisions: allow | prompt | forbidden
+# - Most restrictive match wins: forbidden > prompt > allow
+# ============================================================
+
+# --- ALLOW: hamx to build
+prefix_rule(
+  pattern=["hamx"],
+  decision="allow",
+)
+
+# --- ALLOW: nil to run any scripts
+# prefix_rule(
+#   pattern=["nil"],
+#   decision="allow",
+# )
+
+# --- ALLOW: nil to run the linter
+prefix_rule(
+  pattern=["nil", "Playground/scripts/tools/lint_code.ni"],
+  decision="allow",
+)
+
+# --- ALLOW: read-only SVN commands
+prefix_rule(
+  pattern=["svn", "diff"],
+  decision="allow",
+  match=[["svn", "diff", "-c", "5503", "Engine/Playground"]],
+)
+
+prefix_rule(
+  pattern=["svn", "log"],
+  decision="allow",
+  match=[["svn", "log", "-v", "-r", "5499:5503", "Engine/Playground"]],
+)
+
+prefix_rule(
+  pattern=["svn", "status"],
+  decision="allow",
+  match=[["svn", "status"]],
+)
+
+# --- FORBID: mutating SVN commands
+prefix_rule(pattern=["svn", "commit"], decision="forbidden")
+prefix_rule(pattern=["svn", "add"],    decision="forbidden")
+prefix_rule(pattern=["svn", "rm"],     decision="forbidden")
+prefix_rule(pattern=["svn", "remove"], decision="forbidden")
+prefix_rule(pattern=["svn", "del"],    decision="forbidden")
+prefix_rule(pattern=["svn", "delete"], decision="forbidden")
+prefix_rule(pattern=["svn", "mv"],     decision="forbidden")
+prefix_rule(pattern=["svn", "move"],   decision="forbidden")
+prefix_rule(pattern=["svn", "import"], decision="forbidden")
+
+# --- FORBID: git entirely
+prefix_rule(pattern=["git"], decision="forbidden")
+
+# --- ALLOW: common read-only inspection tools
+prefix_rule(pattern=["rg"],      decision="allow")
+prefix_rule(pattern=["grep"],    decision="allow")
+prefix_rule(pattern=["ham-grep"],decision="allow")
+prefix_rule(pattern=["ls"],      decision="allow")
+prefix_rule(pattern=["find"],    decision="allow")
+prefix_rule(pattern=["cat"],     decision="allow")
+prefix_rule(pattern=["head"],    decision="allow")
+prefix_rule(pattern=["tail"],    decision="allow")
+prefix_rule(pattern=["wc"],      decision="allow")
+prefix_rule(pattern=["C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-Command", "nil Engine/Playground/scripts/tools/lint_code.ni Engine/Playground/sources/nil/core/lang/enum_n_flags.ni"], decision="allow")
+prefix_rule(pattern=["C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-Command", "nil Engine/Playground/scripts/tools/lint_code.ni Engine/Playground/sources/nil/tests/Enum.nip"], decision="allow")
+prefix_rule(pattern=["C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-Command", "nil Engine/Playground/sources/nil/tests/Enum.nip --nil.unittest.targets=ni"], decision="allow")
+prefix_rule(pattern=["C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-Command", "nil --nil.unittest.targets=ni Engine/Playground/sources/nil/tests/Enum.nip"], decision="allow")
+prefix_rule(pattern=["C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-Command", "nil --nil.unittest.targets=ni Engine/Playground/sources/nil/tests/Enum.nip '*_to_string*'"], decision="allow")

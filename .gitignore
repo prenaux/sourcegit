@@ -43,3 +43,13 @@ build/*.AppImage
 SourceGit.app/
 build.command
 src/Properties/launchSettings.json
+
+# Codex
+.codex/*
+!.codex/config.toml
+!.codex/rules/
+!.codex/rules/**
+!.codex/skills/
+!.codex/skills/**
+.codex/skills/.system/
+.codex/skills/.system/**

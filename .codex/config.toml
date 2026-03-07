@@ -1,0 +1,36 @@
+# Repo-local Codex configuration (loaded via CODEX_HOME)
+# Goal:
+# - Prompt for approval
+# - Network allowed inside workspace sandbox (SVN HTTPS works without “escape sandbox”)
+# - Reduce/noise from ghost snapshot warnings
+# - Do not persist global history
+
+# Ask when needed, but don't spam you for normal work.
+# Valid values: untrusted | on-failure | on-request | never
+approval_policy = "on-request"
+sandbox_mode    = "workspace-write"
+model = "gpt-5.3-codex"
+model_reasoning_effort = "medium"
+
+# Allow outbound network *inside* workspace-write sandbox.
+# This prevents the “approve to run outside sandbox for network” spam.
+[sandbox_workspace_write]
+network_access = true
+
+# Keep Codex from writing long-lived transcripts/history.
+[history]
+persistence = "none"
+
+# Optional; Windows-only. Enable if you run Codex natively on Windows (not WSL).
+# See config reference key name.
+[features]
+experimental_windows_sandbox = true
+
+# Ghost snapshot warnings:
+# The warning you hit is controlled by ghost_snapshot.* keys.
+# It is NOT a boolean toggle.
+[ghost_snapshot]
+disable_warnings = true
+
+[notice.model_migrations]
+"gpt-5.2" = "gpt-5.2-codex"
