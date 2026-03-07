@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 
 using Avalonia.Threading;
@@ -186,6 +187,40 @@ namespace SourceGit.ViewModels
                 App.SendNotification(_repo.FullPath, App.Text("SaveAsPatchSuccess"));
         }
 
+        public async Task CopyStashAsPatchAsync(Models.Stash stash, int maxClipboardBytes)
+        {
+            var opts = new List<Models.DiffOption>();
+            var changes = await new Commands.CompareRevisions(_repo.FullPath, $"{stash.SHA}^", stash.SHA)
+                .ReadAsync()
+                .ConfigureAwait(false);
+
+            foreach (var c in changes)
+                opts.Add(new Models.DiffOption(_selectedStash.Parents[0], _selectedStash.SHA, c));
+
+            if (stash.Parents.Count == 3)
+            {
+                var untracked = await new Commands.CompareRevisions(_repo.FullPath, Models.Commit.EmptyTreeSHA1, stash.Parents[2])
+                    .ReadAsync()
+                    .ConfigureAwait(false);
+
+                foreach (var c in untracked)
+                    opts.Add(new Models.DiffOption(Models.Commit.EmptyTreeSHA1, _selectedStash.Parents[2], c));
+            }
+
+            var patch = await Commands.SaveChangesAsPatch.ProcessStashChangesToStringAsync(_repo.FullPath, opts);
+            if (patch == null)
+                return;
+
+            var size = Encoding.UTF8.GetByteCount(patch);
+            if (size > maxClipboardBytes)
+            {
+                App.RaiseException(_repo.FullPath, $"Patch size {size} bytes exceeds clipboard limit {maxClipboardBytes} bytes. Use 'Save as Patch...' instead.");
+                return;
+            }
+
+            await App.CopyTextAsync(patch);
+        }
+
         public void OpenChangeWithExternalDiffTool(Models.Change change)
         {
             Models.DiffOption opt;
@@ -291,3 +326,4 @@ namespace SourceGit.ViewModels
         private DiffContext _diffContext = null;
     }
 }
+

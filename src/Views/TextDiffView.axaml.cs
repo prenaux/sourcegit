@@ -641,21 +641,44 @@ namespace SourceGit.Views
 
         private void OnTextViewContextRequested(object sender, ContextRequestedEventArgs e)
         {
+            var menu = new ContextMenu();
+
             var selection = TextArea.Selection;
-            if (selection.IsEmpty)
+            if (!selection.IsEmpty)
+            {
+                var copy = new MenuItem();
+                copy.Header = App.Text("Copy");
+                copy.Icon = App.CreateMenuIcon("Icons.Copy");
+                copy.Click += async (_, ev) =>
+                {
+                    await CopyWithoutIndicatorsAsync();
+                    ev.Handled = true;
+                };
+                menu.Items.Add(copy);
+            }
+
+            if (this.FindAncestorOfType<DiffView>()?.DataContext is ViewModels.DiffContext diff)
+            {
+                if (!selection.IsEmpty)
+                    menu.Items.Add(new MenuItem() { Header = "-" });
+
+                var copyAsPatch = new MenuItem();
+                copyAsPatch.Header = App.Text("FileCM.CopyAsPatch");
+                copyAsPatch.Icon = App.CreateMenuIcon("Icons.Copy");
+                copyAsPatch.Click += async (_, ev) =>
+                {
+                    if (!TextArea.Selection.IsEmpty)
+                        await CopySelectedAsPatchAsync();
+                    else
+                        await diff.CopyCurrentChangeAsPatchAsync(_maxClipboardPatchBytes);
+                    ev.Handled = true;
+                };
+                menu.Items.Add(copyAsPatch);
+            }
+
+            if (menu.Items.Count == 0)
                 return;
 
-            var copy = new MenuItem();
-            copy.Header = App.Text("Copy");
-            copy.Icon = App.CreateMenuIcon("Icons.Copy");
-            copy.Click += async (_, ev) =>
-            {
-                await CopyWithoutIndicatorsAsync();
-                ev.Handled = true;
-            };
-
-            var menu = new ContextMenu();
-            menu.Items.Add(copy);
             menu.Open(TextArea.TextView);
 
             e.Handled = true;
@@ -886,11 +909,116 @@ namespace SourceGit.Views
             await App.CopyTextAsync(builder.ToString());
         }
 
+        private async Task<bool> CopySelectedAsPatchAsync()
+        {
+            var selection = TextArea.Selection;
+            if (selection.IsEmpty)
+                return false;
+
+            var lines = GetLines();
+            if (lines.Count == 0)
+                return false;
+
+            var startPosition = selection.StartPosition;
+            var endPosition = selection.EndPosition;
+            if (startPosition.Location > endPosition.Location)
+                (startPosition, endPosition) = (endPosition, startPosition);
+
+            var startIdx = startPosition.Line - 1;
+            var endIdx = endPosition.Line - 1;
+            if (startIdx < 0 || startIdx >= lines.Count)
+                return false;
+
+            endIdx = Math.Min(endIdx, lines.Count - 1);
+
+            var added = 0;
+            var deleted = 0;
+            var maxLineNo = 0;
+            for (var i = startIdx; i <= endIdx; i++)
+            {
+                var line = lines[i];
+                if (line.Type == Models.TextDiffLineType.Added)
+                {
+                    added++;
+                    if (line.NewLineNumber > maxLineNo)
+                        maxLineNo = line.NewLineNumber;
+                }
+                else if (line.Type == Models.TextDiffLineType.Deleted)
+                {
+                    deleted++;
+                    if (line.OldLineNumber > maxLineNo)
+                        maxLineNo = line.OldLineNumber;
+                }
+                else if (line.Type == Models.TextDiffLineType.Normal)
+                {
+                    var lineNo = line.NewLineNumber > 0 ? line.NewLineNumber : line.OldLineNumber;
+                    if (lineNo > maxLineNo)
+                        maxLineNo = lineNo;
+                }
+            }
+
+            var width = Math.Max(1, maxLineNo.ToString().Length);
+            var builder = new StringBuilder();
+            if (DataContext is ViewModels.TextDiffContext ctx)
+                builder.Append(ctx.Option.Path).Append(" (+").Append(added).Append(" -").Append(deleted).Append(")\n");
+
+            for (var i = startIdx; i <= endIdx; i++)
+            {
+                var line = lines[i];
+                if (line.Type is Models.TextDiffLineType.None or Models.TextDiffLineType.Indicator)
+                    continue;
+
+                var content = line.Content;
+                if (i == startIdx && startPosition.Column > 1)
+                {
+                    var startCol = Math.Min(startPosition.Column - 1, content.Length);
+                    content = content[startCol..];
+                }
+
+                if (i == endIdx)
+                {
+                    var endCol = Math.Min(Math.Max(endPosition.Column - 1, 0), content.Length);
+                    if (endIdx != startIdx)
+                        content = content[..endCol];
+                    else
+                    {
+                        var startCol = Math.Min(Math.Max(startPosition.Column - 1, 0), line.Content.Length);
+                        var cappedEnd = Math.Min(Math.Max(endPosition.Column - 1, startCol), line.Content.Length);
+                        content = line.Content[startCol..cappedEnd];
+                    }
+                }
+
+                var prefix = line.Type switch
+                {
+                    Models.TextDiffLineType.Added => "+",
+                    Models.TextDiffLineType.Deleted => "-",
+                    Models.TextDiffLineType.Normal => " ",
+                    _ => string.Empty,
+                };
+
+                var lineNo = line.Type switch
+                {
+                    Models.TextDiffLineType.Added => line.NewLineNumber,
+                    Models.TextDiffLineType.Deleted => line.OldLineNumber,
+                    _ => line.NewLineNumber > 0 ? line.NewLineNumber : line.OldLineNumber,
+                };
+
+                builder.Append(lineNo.ToString().PadLeft(width)).Append(" ").Append(prefix).Append(" ").Append(content).Append('\n');
+            }
+
+            if (builder.Length == 0)
+                return false;
+
+            await App.CopyTextAsync(builder.ToString());
+            return true;
+        }
+
         private bool _execSizeChanged;
         private TextMate.Installation _textMate;
         private TextLocation _lastSelectStart = TextLocation.Empty;
         private TextLocation _lastSelectEnd = TextLocation.Empty;
         private LineStyleTransformer _lineStyleTransformer;
+        private const int _maxClipboardPatchBytes = 1024 * 1024;
     }
 
     public class CombinedTextDiffPresenter : ThemedTextDiffPresenter

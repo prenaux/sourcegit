@@ -11,6 +11,8 @@ namespace SourceGit.Views
 {
     public partial class WorkingCopy : UserControl
     {
+        private const int MaxClipboardPatchBytes = 1024 * 1024;
+
         public WorkingCopy()
         {
             InitializeComponent();
@@ -439,6 +441,15 @@ namespace SourceGit.Views
                         e.Handled = true;
                     };
 
+                    var copyPatch = new MenuItem();
+                    copyPatch.Header = App.Text("FileCM.CopyAsPatch");
+                    copyPatch.Icon = App.CreateMenuIcon("Icons.Copy");
+                    copyPatch.Click += async (_, e) =>
+                    {
+                        await vm.CopyChangesToPatchAsync(selectedUnstaged, true, MaxClipboardPatchBytes);
+                        e.Handled = true;
+                    };
+
                     var assumeUnchanged = new MenuItem();
                     assumeUnchanged.Header = App.Text("FileCM.AssumeUnchanged");
                     assumeUnchanged.Icon = App.CreateMenuIcon("Icons.File.Ignore");
@@ -455,6 +466,7 @@ namespace SourceGit.Views
                     menu.Items.Add(discard);
                     menu.Items.Add(stash);
                     menu.Items.Add(patch);
+                    menu.Items.Add(copyPatch);
                     menu.Items.Add(assumeUnchanged);
                     menu.Items.Add(new MenuItem() { Header = "-" });
 
@@ -845,10 +857,20 @@ namespace SourceGit.Views
                     e.Handled = true;
                 };
 
+                var copyPatch = new MenuItem();
+                copyPatch.Header = App.Text("FileCM.CopyAsPatch");
+                copyPatch.Icon = App.CreateMenuIcon("Icons.Copy");
+                copyPatch.Click += async (_, e) =>
+                {
+                    await vm.CopyChangesToPatchAsync(selectedUnstaged, true, MaxClipboardPatchBytes);
+                    e.Handled = true;
+                };
+
                 menu.Items.Add(stage);
                 menu.Items.Add(discard);
                 menu.Items.Add(stash);
                 menu.Items.Add(patch);
+                menu.Items.Add(copyPatch);
 
                 if (hasSelectedFolder)
                 {
@@ -1028,6 +1050,15 @@ namespace SourceGit.Views
                     e.Handled = true;
                 };
 
+                var copyPatch = new MenuItem();
+                copyPatch.Header = App.Text("FileCM.CopyAsPatch");
+                copyPatch.Icon = App.CreateMenuIcon("Icons.Copy");
+                copyPatch.Click += async (_, e) =>
+                {
+                    await vm.CopyChangesToPatchAsync(selectedStaged, false, MaxClipboardPatchBytes);
+                    e.Handled = true;
+                };
+
                 TryAddOpenFileToContextMenu(menu, path);
                 menu.Items.Add(openWithMerger);
                 menu.Items.Add(explore);
@@ -1035,6 +1066,7 @@ namespace SourceGit.Views
                 menu.Items.Add(unstage);
                 menu.Items.Add(stash);
                 menu.Items.Add(patch);
+                menu.Items.Add(copyPatch);
                 menu.Items.Add(new MenuItem() { Header = "-" });
 
                 if (repo.IsLFSEnabled())
@@ -1245,9 +1277,19 @@ namespace SourceGit.Views
                     e.Handled = true;
                 };
 
+                var copyPatch = new MenuItem();
+                copyPatch.Header = App.Text("FileCM.CopyAsPatch");
+                copyPatch.Icon = App.CreateMenuIcon("Icons.Copy");
+                copyPatch.Click += async (_, e) =>
+                {
+                    await vm.CopyChangesToPatchAsync(selectedStaged, false, MaxClipboardPatchBytes);
+                    e.Handled = true;
+                };
+
                 menu.Items.Add(unstage);
                 menu.Items.Add(stash);
                 menu.Items.Add(patch);
+                menu.Items.Add(copyPatch);
 
                 if (ai != null)
                 {

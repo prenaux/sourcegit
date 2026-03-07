@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -249,6 +250,26 @@ namespace SourceGit.ViewModels
 
             if (succ)
                 App.SendNotification(_repo.FullPath, App.Text("SaveAsPatchSuccess"));
+        }
+
+        public async Task CopyChangesAsPatchAsync(List<Models.Change> changes, int maxClipboardBytes)
+        {
+            if (_commit == null)
+                return;
+
+            var baseRevision = _commit.Parents.Count == 0 ? Models.Commit.EmptyTreeSHA1 : _commit.Parents[0];
+            var patch = await Commands.SaveChangesAsPatch.ProcessRevisionCompareChangesToStringAsync(_repo.FullPath, changes, baseRevision, _commit.SHA);
+            if (patch == null)
+                return;
+
+            var size = Encoding.UTF8.GetByteCount(patch);
+            if (size > maxClipboardBytes)
+            {
+                App.RaiseException(_repo.FullPath, $"Patch size {size} bytes exceeds clipboard limit {maxClipboardBytes} bytes. Use 'Save as Patch...' instead.");
+                return;
+            }
+
+            await App.CopyTextAsync(patch);
         }
 
         public async Task ResetToThisRevisionAsync(string path)

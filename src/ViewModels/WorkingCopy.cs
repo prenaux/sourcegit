@@ -1,7 +1,11 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
+
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace SourceGit.ViewModels
@@ -37,12 +41,6 @@ namespace SourceGit.ViewModels
             get => _hasUnsolvedConflicts;
             set => SetProperty(ref _hasUnsolvedConflicts, value);
         }
-
-        public bool CanSwitchBranchDirectly
-        {
-            get;
-            set;
-        } = true;
 
         public InProgressContext InProgressContext
         {
@@ -259,67 +257,64 @@ namespace SourceGit.ViewModels
             _commitMessage = string.Empty;
         }
 
-        public void SetData(List<Models.Change> changes)
+        public void SetData(List<Models.Change> changes, CancellationToken cancellationToken)
         {
             if (!IsChanged(_cached, changes))
             {
-                HasUnsolvedConflicts = _cached.Find(x => x.IsConflicted) != null;
-                UpdateInProgressState();
-                UpdateDetail();
+                // Just force refresh selected changes.
+                Dispatcher.UIThread.Invoke(() =>
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        return;
+
+                    HasUnsolvedConflicts = _cached.Find(x => x.IsConflicted) != null;
+                    UpdateInProgressState();
+                    UpdateDetail();
+                });
+
                 return;
             }
 
             var lastSelectedUnstaged = new HashSet<string>();
+            var lastSelectedStaged = new HashSet<string>();
             if (_selectedUnstaged is { Count: > 0 })
             {
                 foreach (var c in _selectedUnstaged)
                     lastSelectedUnstaged.Add(c.Path);
             }
+            else if (_selectedStaged is { Count: > 0 })
+            {
+                foreach (var c in _selectedStaged)
+                    lastSelectedStaged.Add(c.Path);
+            }
 
             var unstaged = new List<Models.Change>();
-            var visibleUnstaged = new List<Models.Change>();
-            var selectedUnstaged = new List<Models.Change>();
-            var noFilter = string.IsNullOrEmpty(_filter);
             var hasConflict = false;
-            var canSwitchDirectly = true;
             foreach (var c in changes)
             {
                 if (c.WorkTree != Models.ChangeState.None)
                 {
                     unstaged.Add(c);
                     hasConflict |= c.IsConflicted;
-
-                    if (noFilter || c.Path.Contains(_filter, StringComparison.OrdinalIgnoreCase))
-                    {
-                        visibleUnstaged.Add(c);
-                        if (lastSelectedUnstaged.Contains(c.Path))
-                            selectedUnstaged.Add(c);
-                    }
                 }
+            }
 
-                if (!canSwitchDirectly)
-                    continue;
-
-                if (c.WorkTree == Models.ChangeState.Untracked || c.Index == Models.ChangeState.Added)
-                    continue;
-
-                canSwitchDirectly = false;
+            var visibleUnstaged = GetVisibleChanges(unstaged);
+            var selectedUnstaged = new List<Models.Change>();
+            foreach (var c in visibleUnstaged)
+            {
+                if (lastSelectedUnstaged.Contains(c.Path))
+                    selectedUnstaged.Add(c);
             }
 
             var staged = GetStagedChanges(changes);
+
             var visibleStaged = GetVisibleChanges(staged);
             var selectedStaged = new List<Models.Change>();
-            if (_selectedStaged is { Count: > 0 })
+            foreach (var c in visibleStaged)
             {
-                var set = new HashSet<string>();
-                foreach (var c in _selectedStaged)
-                    set.Add(c.Path);
-
-                foreach (var c in visibleStaged)
-                {
-                    if (set.Contains(c.Path))
-                        selectedStaged.Add(c);
-                }
+                if (lastSelectedStaged.Contains(c.Path))
+                    selectedStaged.Add(c);
             }
 
             if (selectedUnstaged.Count == 0 && selectedStaged.Count == 0 && hasConflict)
@@ -328,20 +323,25 @@ namespace SourceGit.ViewModels
                 selectedUnstaged.Add(firstConflict);
             }
 
-            _isLoadingData = true;
-            _cached = changes;
-            HasUnsolvedConflicts = hasConflict;
-            CanSwitchBranchDirectly = canSwitchDirectly;
-            VisibleUnstaged = visibleUnstaged;
-            VisibleStaged = visibleStaged;
-            Unstaged = unstaged;
-            Staged = staged;
-            SelectedUnstaged = selectedUnstaged;
-            SelectedStaged = selectedStaged;
-            _isLoadingData = false;
+            Dispatcher.UIThread.Invoke(() =>
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    return;
 
-            UpdateInProgressState();
-            UpdateDetail();
+                _isLoadingData = true;
+                _cached = changes;
+                HasUnsolvedConflicts = hasConflict;
+                VisibleUnstaged = visibleUnstaged;
+                VisibleStaged = visibleStaged;
+                Unstaged = unstaged;
+                Staged = staged;
+                SelectedUnstaged = selectedUnstaged;
+                SelectedStaged = selectedStaged;
+                _isLoadingData = false;
+
+                UpdateInProgressState();
+                UpdateDetail();
+            });
         }
 
         public async Task StageChangesAsync(List<Models.Change> changes, Models.Change next)
@@ -416,6 +416,22 @@ namespace SourceGit.ViewModels
             var succ = await Commands.SaveChangesAsPatch.ProcessLocalChangesAsync(_repo.FullPath, changes, isUnstaged, saveTo);
             if (succ)
                 App.SendNotification(_repo.FullPath, App.Text("SaveAsPatchSuccess"));
+        }
+
+        public async Task CopyChangesToPatchAsync(List<Models.Change> changes, bool isUnstaged, int maxClipboardBytes)
+        {
+            var patch = await Commands.SaveChangesAsPatch.ProcessLocalChangesToStringAsync(_repo.FullPath, changes, isUnstaged);
+            if (patch == null)
+                return;
+
+            var size = Encoding.UTF8.GetByteCount(patch);
+            if (size > maxClipboardBytes)
+            {
+                App.RaiseException(_repo.FullPath, $"Patch size {size} bytes exceeds clipboard limit {maxClipboardBytes} bytes. Use 'Save as Patch...' instead.");
+                return;
+            }
+
+            await App.CopyTextAsync(patch);
         }
 
         public void Discard(List<Models.Change> changes)
@@ -644,14 +660,12 @@ namespace SourceGit.ViewModels
             {
                 if ((!autoStage && _staged.Count == 0) || (autoStage && _cached.Count == 0))
                 {
-                    var rs = await App.AskConfirmEmptyCommitAsync(_cached.Count > 0, _selectedUnstaged is { Count: > 0 });
+                    var rs = await App.AskConfirmEmptyCommitAsync(_cached.Count > 0);
                     if (rs == Models.ConfirmEmptyCommitResult.Cancel)
                         return;
 
                     if (rs == Models.ConfirmEmptyCommitResult.StageAllAndCommit)
                         autoStage = true;
-                    else if (rs == Models.ConfirmEmptyCommitResult.StageSelectedAndCommit)
-                        await StageChangesAsync(_selectedUnstaged, null);
                 }
             }
 
@@ -672,11 +686,8 @@ namespace SourceGit.ViewModels
 
             if (succ)
             {
-                // Do not use property `UseAmend` but manually trigger property changed to avoid refreshing staged changes here.
-                _useAmend = false;
-                OnPropertyChanged(nameof(UseAmend));
-
                 CommitMessage = string.Empty;
+                UseAmend = false;
                 if (autoPush && _repo.Remotes.Count > 0)
                 {
                     Models.Branch pushBranch = null;
@@ -741,7 +752,10 @@ namespace SourceGit.ViewModels
         private List<Models.Change> GetStagedChanges(List<Models.Change> cached)
         {
             if (_useAmend)
-                return new Commands.QueryStagedChangesWithAmend(_repo.FullPath).GetResult();
+            {
+                var head = new Commands.QuerySingleCommit(_repo.FullPath, "HEAD").GetResult();
+                return new Commands.QueryStagedChangesWithAmend(_repo.FullPath, head.Parents.Count == 0 ? Models.Commit.EmptyTreeSHA1 : $"{head.SHA}^").GetResult();
+            }
 
             var rs = new List<Models.Change>();
             foreach (var c in cached)
@@ -857,3 +871,4 @@ namespace SourceGit.ViewModels
         private InProgressContext _inProgressContext = null;
     }
 }
+

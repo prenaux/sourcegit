@@ -11,6 +11,8 @@ namespace SourceGit.Views
 {
     public partial class RevisionCompare : UserControl
     {
+        private const int MaxClipboardPatchBytes = 1024 * 1024;
+
         public RevisionCompare()
         {
             InitializeComponent();
@@ -49,6 +51,15 @@ namespace SourceGit.Views
                         App.RaiseException(string.Empty, $"Failed to save as patch: {exception.Message}");
                     }
 
+                    e.Handled = true;
+                };
+
+                var copyPatch = new MenuItem();
+                copyPatch.Header = App.Text("FileCM.CopyAsPatch");
+                copyPatch.Icon = App.CreateMenuIcon("Icons.Copy");
+                copyPatch.Click += async (_, e) =>
+                {
+                    await vm.CopyChangesAsPatchAsync(selected, MaxClipboardPatchBytes);
                     e.Handled = true;
                 };
 
@@ -125,6 +136,7 @@ namespace SourceGit.Views
 
                     menu.Items.Add(new MenuItem() { Header = "-" });
                     menu.Items.Add(patch);
+                    menu.Items.Add(copyPatch);
                     menu.Items.Add(new MenuItem() { Header = "-" });
                     menu.Items.Add(resetToLeft);
                     menu.Items.Add(resetToRight);
@@ -183,6 +195,7 @@ namespace SourceGit.Views
                     };
 
                     menu.Items.Add(patch);
+                    menu.Items.Add(copyPatch);
                     menu.Items.Add(new MenuItem() { Header = "-" });
                     menu.Items.Add(resetToLeft);
                     menu.Items.Add(resetToRight);
@@ -229,6 +242,14 @@ namespace SourceGit.Views
             {
                 App.RaiseException(string.Empty, $"Failed to save as patch: {exception.Message}");
             }
+
+            e.Handled = true;
+        }
+
+        private async void OnCopyAsPatch(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is ViewModels.RevisionCompare vm)
+                await vm.CopyChangesAsPatchAsync(null, MaxClipboardPatchBytes);
 
             e.Handled = true;
         }

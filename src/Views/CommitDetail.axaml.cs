@@ -12,6 +12,8 @@ namespace SourceGit.Views
 {
     public partial class CommitDetail : UserControl
     {
+        private const int MaxClipboardPatchBytes = 1024 * 1024;
+
         public CommitDetail()
         {
             InitializeComponent();
@@ -73,6 +75,15 @@ namespace SourceGit.Views
                 e.Handled = true;
             };
 
+            var copyPatch = new MenuItem();
+            copyPatch.Header = App.Text("FileCM.CopyAsPatch");
+            copyPatch.Icon = App.CreateMenuIcon("Icons.Copy");
+            copyPatch.Click += async (_, e) =>
+            {
+                await vm.CopyChangesAsPatchAsync(changes, MaxClipboardPatchBytes);
+                e.Handled = true;
+            };
+
             var copyPath = new MenuItem();
             copyPath.Header = App.Text("CopyPath");
             copyPath.Icon = App.CreateMenuIcon("Icons.Copy");
@@ -98,6 +109,7 @@ namespace SourceGit.Views
             menu.Items.Add(new MenuItem { Header = "-" });
             menu.Items.Add(history);
             menu.Items.Add(patch);
+            menu.Items.Add(copyPatch);
             menu.Items.Add(new MenuItem { Header = "-" });
             menu.Items.Add(copyPath);
             menu.Items.Add(copyFullPath);
@@ -141,8 +153,18 @@ namespace SourceGit.Views
                 e.Handled = true;
             };
 
+            var copyPatch = new MenuItem();
+            copyPatch.Header = App.Text("FileCM.CopyAsPatch");
+            copyPatch.Icon = App.CreateMenuIcon("Icons.Copy");
+            copyPatch.Click += async (_, e) =>
+            {
+                await vm.CopyChangesAsPatchAsync(changes, MaxClipboardPatchBytes);
+                e.Handled = true;
+            };
+
             var menu = new ContextMenu();
             menu.Items.Add(patch);
+            menu.Items.Add(copyPatch);
             menu.Items.Add(new MenuItem() { Header = "-" });
 
             if (!repo.IsBare)
@@ -318,6 +340,15 @@ namespace SourceGit.Views
                 e.Handled = true;
             };
 
+            var copyPatch = new MenuItem();
+            copyPatch.Header = App.Text("FileCM.CopyAsPatch");
+            copyPatch.Icon = App.CreateMenuIcon("Icons.Copy");
+            copyPatch.Click += async (_, e) =>
+            {
+                await vm.CopyChangesAsPatchAsync([change], MaxClipboardPatchBytes);
+                e.Handled = true;
+            };
+
             var menu = new ContextMenu();
             menu.Items.Add(openWith);
             menu.Items.Add(openWithMerger);
@@ -326,6 +357,7 @@ namespace SourceGit.Views
             menu.Items.Add(history);
             menu.Items.Add(blame);
             menu.Items.Add(patch);
+            menu.Items.Add(copyPatch);
             menu.Items.Add(new MenuItem { Header = "-" });
 
             if (!repo.IsBare)

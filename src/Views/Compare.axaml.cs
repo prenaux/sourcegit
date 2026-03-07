@@ -10,6 +10,8 @@ namespace SourceGit.Views
 {
     public partial class Compare : ChromelessWindow
     {
+        private const int MaxClipboardPatchBytes = 1024 * 1024;
+
         public Compare()
         {
             InitializeComponent();
@@ -53,6 +55,15 @@ namespace SourceGit.Views
                     e.Handled = true;
                 };
 
+                var copyPatch = new MenuItem();
+                copyPatch.Header = App.Text("FileCM.CopyAsPatch");
+                copyPatch.Icon = App.CreateMenuIcon("Icons.Copy");
+                copyPatch.Click += async (_, e) =>
+                {
+                    await vm.CopyChangesAsPatchAsync(selected, MaxClipboardPatchBytes);
+                    e.Handled = true;
+                };
+
                 if (selected.Count == 1)
                 {
                     var change = selected[0];
@@ -84,6 +95,7 @@ namespace SourceGit.Views
 
                     menu.Items.Add(new MenuItem() { Header = "-" });
                     menu.Items.Add(patch);
+                    menu.Items.Add(copyPatch);
 
                     if (vm.CanResetFiles)
                     {
@@ -137,6 +149,7 @@ namespace SourceGit.Views
                 else
                 {
                     menu.Items.Add(patch);
+                    menu.Items.Add(copyPatch);
 
                     if (vm.CanResetFiles)
                     {

@@ -10,6 +10,8 @@ namespace SourceGit.Views
 {
     public partial class StashesPage : UserControl
     {
+        private const int MaxClipboardPatchBytes = 1024 * 1024;
+
         public StashesPage()
         {
             InitializeComponent();
@@ -97,6 +99,15 @@ namespace SourceGit.Views
                     ev.Handled = true;
                 };
 
+                var copyPatch = new MenuItem();
+                copyPatch.Header = App.Text("StashCM.CopyAsPatch");
+                copyPatch.Icon = App.CreateMenuIcon("Icons.Copy");
+                copyPatch.Click += async (_, ev) =>
+                {
+                    await vm.CopyStashAsPatchAsync(stash, MaxClipboardPatchBytes);
+                    ev.Handled = true;
+                };
+
                 var copy = new MenuItem();
                 copy.Header = App.Text("StashCM.CopyMessage");
                 copy.Icon = App.CreateMenuIcon("Icons.Copy");
@@ -112,6 +123,7 @@ namespace SourceGit.Views
                 menu.Items.Add(drop);
                 menu.Items.Add(new MenuItem { Header = "-" });
                 menu.Items.Add(patch);
+                menu.Items.Add(copyPatch);
                 menu.Items.Add(new MenuItem { Header = "-" });
                 menu.Items.Add(copy);
                 menu.Open(border);

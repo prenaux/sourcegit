@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 
 using Avalonia.Threading;
@@ -309,6 +310,22 @@ namespace SourceGit.ViewModels
                 App.SendNotification(_repo.FullPath, App.Text("SaveAsPatchSuccess"));
         }
 
+        public async Task CopyChangesAsPatchAsync(List<Models.Change> changes, int maxClipboardBytes)
+        {
+            var patch = await Commands.SaveChangesAsPatch.ProcessRevisionCompareChangesToStringAsync(_repo.FullPath, changes ?? _changes, GetSHA(_startPoint), GetSHA(_endPoint));
+            if (patch == null)
+                return;
+
+            var size = Encoding.UTF8.GetByteCount(patch);
+            if (size > maxClipboardBytes)
+            {
+                App.RaiseException(_repo.FullPath, $"Patch size {size} bytes exceeds clipboard limit {maxClipboardBytes} bytes. Use 'Save as Patch...' instead.");
+                return;
+            }
+
+            await App.CopyTextAsync(patch);
+        }
+
         public void ClearSearchFilter()
         {
             SearchFilter = string.Empty;
@@ -391,3 +408,4 @@ namespace SourceGit.ViewModels
         private DiffContext _diffContext = null;
     }
 }
+
