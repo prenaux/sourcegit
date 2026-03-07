@@ -621,11 +621,19 @@ namespace SourceGit.Views
 
         private async void OnTextAreaKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.KeyModifiers.Equals(OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control))
+            var primary = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
+            var hasPrimary = e.KeyModifiers.HasFlag(primary);
+            var hasShift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+            var hasAlt = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
+
+            if (hasPrimary && !hasAlt)
             {
                 if (e.Key == Key.C)
                 {
-                    await CopyWithoutIndicatorsAsync();
+                    if (hasShift)
+                        await CopyAsPatchAsync();
+                    else
+                        await CopyWithoutIndicatorsAsync();
                     e.Handled = true;
                 }
             }
@@ -642,35 +650,32 @@ namespace SourceGit.Views
         private void OnTextViewContextRequested(object sender, ContextRequestedEventArgs e)
         {
             var menu = new ContextMenu();
+            var isMacOS = OperatingSystem.IsMacOS();
 
             var selection = TextArea.Selection;
-            if (!selection.IsEmpty)
+            var copy = new MenuItem();
+            copy.Header = App.Text("Copy");
+            copy.Icon = App.CreateMenuIcon("Icons.Copy");
+            copy.Tag = isMacOS ? "⌘+C" : "Ctrl+C";
+            copy.IsEnabled = !selection.IsEmpty;
+            copy.Click += async (_, ev) =>
             {
-                var copy = new MenuItem();
-                copy.Header = App.Text("Copy");
-                copy.Icon = App.CreateMenuIcon("Icons.Copy");
-                copy.Click += async (_, ev) =>
-                {
-                    await CopyWithoutIndicatorsAsync();
-                    ev.Handled = true;
-                };
-                menu.Items.Add(copy);
-            }
+                await CopyWithoutIndicatorsAsync();
+                ev.Handled = true;
+            };
+            menu.Items.Add(copy);
 
             if (this.FindAncestorOfType<DiffView>()?.DataContext is ViewModels.DiffContext diff)
             {
-                if (!selection.IsEmpty)
-                    menu.Items.Add(new MenuItem() { Header = "-" });
+                menu.Items.Add(new MenuItem() { Header = "-" });
 
                 var copyAsPatch = new MenuItem();
                 copyAsPatch.Header = App.Text("FileCM.CopyAsPatch");
                 copyAsPatch.Icon = App.CreateMenuIcon("Icons.Copy");
+                copyAsPatch.Tag = isMacOS ? "⌘+⇧+C" : "Ctrl+Shift+C";
                 copyAsPatch.Click += async (_, ev) =>
                 {
-                    if (!TextArea.Selection.IsEmpty)
-                        await CopySelectedAsPatchAsync();
-                    else
-                        await diff.CopyCurrentChangeAsPatchAsync(_maxClipboardPatchBytes);
+                    await CopyAsPatchAsync(diff);
                     ev.Handled = true;
                 };
                 menu.Items.Add(copyAsPatch);
@@ -682,6 +687,19 @@ namespace SourceGit.Views
             menu.Open(TextArea.TextView);
 
             e.Handled = true;
+        }
+
+        private async Task CopyAsPatchAsync(ViewModels.DiffContext diff = null)
+        {
+            if (!TextArea.Selection.IsEmpty)
+            {
+                await CopySelectedAsPatchAsync();
+                return;
+            }
+
+            diff ??= this.FindAncestorOfType<DiffView>()?.DataContext as ViewModels.DiffContext;
+            if (diff != null)
+                await diff.CopyCurrentChangeAsPatchAsync(_maxClipboardPatchBytes);
         }
 
         private void OnTextViewPointerChanged(object sender, PointerEventArgs e)
