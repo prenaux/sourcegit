@@ -361,7 +361,7 @@
   <x:String x:Key="Text.Diff.Old" xml:space="preserve">OLD</x:String>
   <x:String x:Key="Text.Diff.Prev" xml:space="preserve">Previous Difference</x:String>
   <x:String x:Key="Text.Diff.SaveAsPatch" xml:space="preserve">Save as Patch...</x:String>
-  <x:String x:Key="Text.Diff.CopyAsPatch" xml:space="preserve">Copy as Patch...</x:String>
+  <x:String x:Key="Text.Diff.CopyAsPatch" xml:space="preserve">Copy as Patch</x:String>
   <x:String x:Key="Text.Diff.ShowHiddenSymbols" xml:space="preserve">Show hidden symbols</x:String>
   <x:String x:Key="Text.Diff.SideBySide" xml:space="preserve">Side-By-Side Diff</x:String>
   <x:String x:Key="Text.Diff.Submodule" xml:space="preserve">SUBMODULE</x:String>
@@ -410,7 +410,7 @@
   <x:String x:Key="Text.FileCM.DiscardMulti" xml:space="preserve">Discard {0} files...</x:String>
   <x:String x:Key="Text.FileCM.ResolveUsing" xml:space="preserve">Resolve Using ${0}$</x:String>
   <x:String x:Key="Text.FileCM.SaveAsPatch" xml:space="preserve">Save as Patch...</x:String>
-  <x:String x:Key="Text.FileCM.CopyAsPatch" xml:space="preserve">Copy as Patch...</x:String>
+  <x:String x:Key="Text.FileCM.CopyAsPatch" xml:space="preserve">Copy as Patch</x:String>
   <x:String x:Key="Text.FileCM.Stage" xml:space="preserve">Stage</x:String>
   <x:String x:Key="Text.FileCM.StageMulti" xml:space="preserve">Stage {0} files</x:String>
   <x:String x:Key="Text.FileCM.Stash" xml:space="preserve">Stash...</x:String>
@@ -524,6 +524,7 @@
   <x:String x:Key="Text.Hotkeys.TextEditor.OpenExternalMergeTool" xml:space="preserve">Open with external diff/merge tool</x:String>
   <x:String x:Key="Text.Hotkeys.TextEditor.Search" xml:space="preserve">Open search panel</x:String>
   <x:String x:Key="Text.Hunk.Discard" xml:space="preserve">Discard</x:String>
+  <x:String x:Key="Text.Hunk.CopyPatch" xml:space="preserve">Copy Patch</x:String>
   <x:String x:Key="Text.Hunk.Stage" xml:space="preserve">Stage</x:String>
   <x:String x:Key="Text.Hunk.Unstage" xml:space="preserve">Unstage</x:String>
   <x:String x:Key="Text.Init" xml:space="preserve">Initialize Repository</x:String>
@@ -860,7 +861,7 @@
   <x:String x:Key="Text.StashCM.Apply" xml:space="preserve">Apply</x:String>
   <x:String x:Key="Text.StashCM.ApplyFileChanges" xml:space="preserve">Apply Changes</x:String>
   <x:String x:Key="Text.StashCM.CopyMessage" xml:space="preserve">Copy Message</x:String>
-  <x:String x:Key="Text.StashCM.CopyAsPatch" xml:space="preserve">Copy as Patch...</x:String>
+  <x:String x:Key="Text.StashCM.CopyAsPatch" xml:space="preserve">Copy as Patch</x:String>
   <x:String x:Key="Text.StashCM.Drop" xml:space="preserve">Drop</x:String>
   <x:String x:Key="Text.StashCM.SaveAsPatch" xml:space="preserve">Save as Patch...</x:String>
   <x:String x:Key="Text.StashDropConfirm" xml:space="preserve">Drop Stash</x:String>
