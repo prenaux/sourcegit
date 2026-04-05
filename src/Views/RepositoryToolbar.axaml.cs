@@ -161,18 +161,6 @@ namespace SourceGit.Views
             }
         }
 
-        private async void FetchDirectlyByHotKey(object sender, RoutedEventArgs e)
-        {
-            if (App.GetLauncher() is { CommandPalette: { } } launcher)
-                return;
-
-            if (DataContext is ViewModels.Repository repo)
-            {
-                await repo.FetchAsync(true);
-                e.Handled = true;
-            }
-        }
-
         private async void Pull(object sender, TappedEventArgs e)
         {
             if (DataContext is ViewModels.Repository repo)
@@ -182,35 +170,11 @@ namespace SourceGit.Views
             }
         }
 
-        private async void PullDirectlyByHotKey(object sender, RoutedEventArgs e)
-        {
-            if (App.GetLauncher() is { CommandPalette: { } } launcher)
-                return;
-
-            if (DataContext is ViewModels.Repository repo)
-            {
-                await repo.PullAsync(true);
-                e.Handled = true;
-            }
-        }
-
         private async void Push(object sender, TappedEventArgs e)
         {
             if (DataContext is ViewModels.Repository repo)
             {
                 await repo.PushAsync(e.KeyModifiers is KeyModifiers.Control);
-                e.Handled = true;
-            }
-        }
-
-        private async void PushDirectlyByHotKey(object sender, RoutedEventArgs e)
-        {
-            if (App.GetLauncher() is { CommandPalette: { } } launcher)
-                return;
-
-            if (DataContext is ViewModels.Repository repo)
-            {
-                await repo.PushAsync(true);
                 e.Handled = true;
             }
         }
