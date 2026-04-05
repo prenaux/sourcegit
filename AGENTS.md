@@ -32,3 +32,24 @@ Stop and ask when stuck rather than randomly tweaking code.
 - ASCII7 only in documentation - no emojis, no Unicode
 - No markdown tables - use plain lists
 - Follow existing code style in the file you're editing
+
+## Local Temp Folders
+
+- Use `_tmp/` for local runtime/cache/scratchpad artifacts.
+- Store local app data under `_tmp/localappdata/`.
+- Keep all of the above out of commits.
+
+## Build And Validation
+
+- Local toolchains are not set up in this workspace.
+- Do not rely on local build/test execution for final verification.
+- Use GitHub Actions CI as the source of truth for build and validation status.
+
+- For `gh` on Windows in this workspace, set local app data to a repo-local path first:
+  - `New-Item -ItemType Directory -Force _tmp/localappdata | Out-Null`
+  - `$env:LOCALAPPDATA = (Resolve-Path .\_tmp\localappdata).Path`
+
+- Preferred workflow:
+  - Trigger CI: `gh workflow run ci.yml -R prenaux/sourcegit --ref master`
+  - Wait for completion: `gh run watch <run-id> -R prenaux/sourcegit --exit-status`
+  - Read failures: `gh run view <run-id> -R prenaux/sourcegit --log-failed`
