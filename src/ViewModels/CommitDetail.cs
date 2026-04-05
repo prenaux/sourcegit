@@ -257,7 +257,7 @@ namespace SourceGit.ViewModels
             if (_commit == null)
                 return;
 
-            var baseRevision = _commit.Parents.Count == 0 ? Models.Commit.EmptyTreeSHA1 : _commit.Parents[0];
+            var baseRevision = _commit.Parents.Count == 0 ? Models.EmptyTreeHash.Guess(_commit.SHA) : _commit.Parents[0];
             var patch = await Commands.SaveChangesAsPatch.ProcessRevisionCompareChangesToStringAsync(_repo.FullPath, changes, baseRevision, _commit.SHA);
             if (patch == null)
                 return;

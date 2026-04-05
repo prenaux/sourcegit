@@ -199,12 +199,12 @@ namespace SourceGit.ViewModels
 
             if (stash.Parents.Count == 3)
             {
-                var untracked = await new Commands.CompareRevisions(_repo.FullPath, Models.Commit.EmptyTreeSHA1, stash.Parents[2])
+                var untracked = await new Commands.CompareRevisions(_repo.FullPath, Models.EmptyTreeHash.Guess(stash.Parents[2]), stash.Parents[2])
                     .ReadAsync()
                     .ConfigureAwait(false);
 
                 foreach (var c in untracked)
-                    opts.Add(new Models.DiffOption(Models.Commit.EmptyTreeSHA1, _selectedStash.Parents[2], c));
+                    opts.Add(new Models.DiffOption(Models.EmptyTreeHash.Guess(_selectedStash.Parents[2]), _selectedStash.Parents[2], c));
             }
 
             var patch = await Commands.SaveChangesAsPatch.ProcessStashChangesToStringAsync(_repo.FullPath, opts);

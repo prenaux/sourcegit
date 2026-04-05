@@ -42,6 +42,11 @@ namespace SourceGit.ViewModels
             set => SetProperty(ref _hasUnsolvedConflicts, value);
         }
 
+        public bool CanSwitchBranchDirectly
+        {
+            get => _cached.Count == 0 && !HasUnsolvedConflicts;
+        }
+
         public InProgressContext InProgressContext
         {
             get => _inProgressContext;
@@ -660,7 +665,7 @@ namespace SourceGit.ViewModels
             {
                 if ((!autoStage && _staged.Count == 0) || (autoStage && _cached.Count == 0))
                 {
-                    var rs = await App.AskConfirmEmptyCommitAsync(_cached.Count > 0);
+                    var rs = await App.AskConfirmEmptyCommitAsync(_cached.Count > 0, _selectedUnstaged.Count > 0);
                     if (rs == Models.ConfirmEmptyCommitResult.Cancel)
                         return;
 
@@ -753,8 +758,7 @@ namespace SourceGit.ViewModels
         {
             if (_useAmend)
             {
-                var head = new Commands.QuerySingleCommit(_repo.FullPath, "HEAD").GetResult();
-                return new Commands.QueryStagedChangesWithAmend(_repo.FullPath, head.Parents.Count == 0 ? Models.Commit.EmptyTreeSHA1 : $"{head.SHA}^").GetResult();
+                return new Commands.QueryStagedChangesWithAmend(_repo.FullPath).GetResult();
             }
 
             var rs = new List<Models.Change>();

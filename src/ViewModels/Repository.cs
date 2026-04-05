@@ -1333,7 +1333,7 @@ namespace SourceGit.ViewModels
                     if (token.IsCancellationRequested)
                         return;
 
-                    _workingCopy.SetData(changes);
+                    _workingCopy.SetData(changes, token);
                     LocalChangesCount = changes.Count;
                     OnPropertyChanged(nameof(InProgressContext));
                     GetOwnerPage()?.ChangeDirtyState(Models.DirtyState.HasLocalChanges, changes.Count == 0);
