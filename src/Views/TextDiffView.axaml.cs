@@ -649,8 +649,18 @@ namespace SourceGit.Views
 
         private void OnTextViewContextRequested(object sender, ContextRequestedEventArgs e)
         {
+            var clickedLine = GetContextLine(e);
+            var oldLine = clickedLine?.OldLineNumber ?? 0;
+            var newLine = clickedLine?.NewLineNumber ?? 0;
+
             var menu = new ContextMenu();
             var isMacOS = OperatingSystem.IsMacOS();
+
+            var lineInfo = new MenuItem();
+            lineInfo.Header = App.Text("Diff.ContextMenu.Line", newLine);
+            lineInfo.IsEnabled = false;
+            menu.Items.Add(lineInfo);
+            menu.Items.Add(new MenuItem() { Header = "-" });
 
             var selection = TextArea.Selection;
             var copy = new MenuItem();
@@ -667,8 +677,6 @@ namespace SourceGit.Views
 
             if (this.FindAncestorOfType<DiffView>()?.DataContext is ViewModels.DiffContext diff)
             {
-                menu.Items.Add(new MenuItem() { Header = "-" });
-
                 var copyAsPatch = new MenuItem();
                 copyAsPatch.Header = App.Text("FileCM.CopyAsPatch");
                 copyAsPatch.Icon = App.CreateMenuIcon("Icons.Copy");
@@ -679,10 +687,43 @@ namespace SourceGit.Views
                     ev.Handled = true;
                 };
                 menu.Items.Add(copyAsPatch);
-            }
 
-            if (menu.Items.Count == 0)
-                return;
+                var openWithMerger = new MenuItem();
+                openWithMerger.Header = App.Text("OpenInExternalMergeTool");
+                openWithMerger.Icon = App.CreateMenuIcon("Icons.OpenWith");
+                openWithMerger.Click += (_, ev) =>
+                {
+                    diff.OpenExternalMergeTool(oldLine, newLine);
+                    ev.Handled = true;
+                };
+                menu.Items.Add(openWithMerger);
+
+                var repo = diff.FindRepository();
+                if (repo != null && DataContext is ViewModels.TextDiffContext ctx)
+                {
+                    var actions = repo.GetCustomActions(Models.CustomActionScope.File);
+                    if (actions.Count > 0)
+                    {
+                        menu.Items.Add(new MenuItem() { Header = "-" });
+
+                        var target = new Models.CustomActionTargetFile(ctx.Option.Path, null, newLine);
+                        foreach (var action in actions)
+                        {
+                            var (dup, label) = action;
+                            var item = new MenuItem();
+                            item.Icon = App.CreateMenuIcon("Icons.Action");
+                            item.Header = label;
+                            item.Click += async (_, ev) =>
+                            {
+                                await repo.ExecCustomActionAsync(dup, target);
+                                ev.Handled = true;
+                            };
+
+                            menu.Items.Add(item);
+                        }
+                    }
+                }
+            }
 
             menu.Open(TextArea.TextView);
 
@@ -795,6 +836,39 @@ namespace SourceGit.Views
         {
             if (ViewModels.TextDiffSelectedChunk.IsChanged(SelectedChunk, chunk))
                 SetCurrentValue(SelectedChunkProperty, chunk);
+        }
+
+        private Models.TextDiffLine GetContextLine(ContextRequestedEventArgs e)
+        {
+            var lines = GetLines();
+            if (lines.Count == 0)
+                return null;
+
+            var lineIdx = TextArea.Caret.Line - 1;
+            var view = TextArea.TextView;
+            if (e.TryGetPosition(view, out var position) && view.VisualLinesValid)
+            {
+                lineIdx = -1;
+                var y = position.Y + view.VerticalOffset;
+                foreach (var line in view.VisualLines)
+                {
+                    if (line.IsDisposed || line.FirstDocumentLine == null || line.FirstDocumentLine.IsDeleted)
+                        continue;
+
+                    var index = line.FirstDocumentLine.LineNumber;
+                    if (index > lines.Count)
+                        break;
+
+                    var endY = line.GetTextLineVisualYPosition(line.TextLines[^1], VisualYPosition.LineBottom);
+                    if (endY > y)
+                    {
+                        lineIdx = index - 1;
+                        break;
+                    }
+                }
+            }
+
+            return lineIdx >= 0 && lineIdx < lines.Count ? lines[lineIdx] : null;
         }
 
         private List<Models.TextDiffLine> GetLines()

@@ -5,11 +5,13 @@ namespace SourceGit.Commands
 {
     public class DiffTool : Command
     {
-        public DiffTool(string repo, Models.DiffOption option)
+        public DiffTool(string repo, Models.DiffOption option, int oldLine = 0, int newLine = 0)
         {
             WorkingDirectory = repo;
             Context = repo;
             _option = option;
+            _oldLine = oldLine;
+            _newLine = newLine;
         }
 
         public void Open()
@@ -30,7 +32,11 @@ namespace SourceGit.Commands
             }
             else
             {
-                var cmd = $"{tool.Exec.Quoted()} {tool.Cmd}";
+                var toolCmd = tool.Cmd
+                    .Replace("$OLD_LINE", $"{_oldLine}")
+                    .Replace("$NEW_LINE", $"{_newLine}")
+                    .Replace("$LINE", $"{_newLine}");
+                var cmd = $"{tool.Exec.Quoted()} {toolCmd}";
                 Args = $"-c difftool.sourcegit.cmd={cmd.Quoted()} difftool --tool=sourcegit --no-prompt {_option}";
             }
 
@@ -73,5 +79,7 @@ namespace SourceGit.Commands
         }
 
         private Models.DiffOption _option;
+        private int _oldLine;
+        private int _newLine;
     }
 }

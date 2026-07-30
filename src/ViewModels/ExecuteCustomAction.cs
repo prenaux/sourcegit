@@ -179,15 +179,17 @@ namespace SourceGit.ViewModels
         {
             org = org.Replace("${REPO}", GetWorkdir());
 
-            return Target switch
+            org = Target switch
             {
                 Models.Branch b => org.Replace("${BRANCH_FRIENDLY_NAME}", b.FriendlyName).Replace("${BRANCH}", b.Name).Replace("${REMOTE}", b.Remote),
                 Models.Commit c => org.Replace("${SHA}", c.SHA),
                 Models.Tag t => org.Replace("${TAG}", t.Name),
                 Models.Remote r => org.Replace("${REMOTE}", r.Name),
-                Models.CustomActionTargetFile f => org.Replace("${FILE}", f.File).Replace("${SHA}", f.Revision?.SHA ?? string.Empty),
+                Models.CustomActionTargetFile f => org.Replace("${FILE}", f.File).Replace("${SHA}", f.Revision?.SHA ?? string.Empty).Replace("${LINE}", $"{f.Line}"),
                 _ => org
             };
+
+            return org.Replace("${LINE}", "0");
         }
 
         private string GetWorkdir()

@@ -21,7 +21,7 @@ namespace SourceGit.Models
         ComboBox,
     }
 
-    public record CustomActionTargetFile(string File, Commit Revision);
+    public record CustomActionTargetFile(string File, Commit Revision, int Line = 0);
 
     public class CustomActionControl : ObservableObject
     {

@@ -120,7 +120,27 @@ namespace SourceGit.ViewModels
 
         public void OpenExternalMergeTool()
         {
-            new Commands.DiffTool(_repo, _option).Open();
+            OpenExternalMergeTool(0, 0);
+        }
+
+        public void OpenExternalMergeTool(int oldLine, int newLine)
+        {
+            new Commands.DiffTool(_repo, _option, oldLine, newLine).Open();
+        }
+
+        public Repository FindRepository()
+        {
+            var launcher = App.GetLauncher();
+            if (launcher == null)
+                return null;
+
+            foreach (var page in launcher.Pages)
+            {
+                if (page.Data is Repository repo && repo.FullPath.Equals(_repo, StringComparison.Ordinal))
+                    return repo;
+            }
+
+            return null;
         }
 
         public async Task CopyCurrentChangeAsPatchAsync(int maxClipboardBytes)

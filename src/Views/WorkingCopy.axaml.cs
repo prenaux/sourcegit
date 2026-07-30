@@ -1389,10 +1389,6 @@ namespace SourceGit.Views
                 return;
 
             var target = new Models.CustomActionTargetFile(path, null);
-            var custom = new MenuItem();
-            custom.Header = App.Text("FileCM.CustomAction");
-            custom.Icon = App.CreateMenuIcon("Icons.Action");
-
             foreach (var action in actions)
             {
                 var (dup, label) = action;
@@ -1405,10 +1401,9 @@ namespace SourceGit.Views
                     e.Handled = true;
                 };
 
-                custom.Items.Add(item);
+                menu.Items.Add(item);
             }
 
-            menu.Items.Add(custom);
             menu.Items.Add(new MenuItem() { Header = "-" });
         }
     }

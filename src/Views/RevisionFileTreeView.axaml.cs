@@ -704,10 +704,6 @@ namespace SourceGit.Views
             if (actions.Count > 0)
             {
                 var target = new Models.CustomActionTargetFile(file.Path, vm.Commit);
-                var custom = new MenuItem();
-                custom.Header = App.Text("FileCM.CustomAction");
-                custom.Icon = App.CreateMenuIcon("Icons.Action");
-
                 foreach (var action in actions)
                 {
                     var (dup, label) = action;
@@ -720,10 +716,9 @@ namespace SourceGit.Views
                         e.Handled = true;
                     };
 
-                    custom.Items.Add(item);
+                    menu.Items.Add(item);
                 }
 
-                menu.Items.Add(custom);
                 menu.Items.Add(new MenuItem() { Header = "-" });
             }
 

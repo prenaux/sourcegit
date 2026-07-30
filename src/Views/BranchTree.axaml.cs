@@ -1283,10 +1283,6 @@ namespace SourceGit.Views
             if (actions.Count == 0)
                 return;
 
-            var custom = new MenuItem();
-            custom.Header = App.Text("BranchCM.CustomAction");
-            custom.Icon = App.CreateMenuIcon("Icons.Action");
-
             foreach (var action in actions)
             {
                 var (dup, label) = action;
@@ -1299,10 +1295,9 @@ namespace SourceGit.Views
                     e.Handled = true;
                 };
 
-                custom.Items.Add(item);
+                menu.Items.Add(item);
             }
 
-            menu.Items.Add(custom);
             menu.Items.Add(new MenuItem() { Header = "-" });
         }
 
@@ -1311,10 +1306,6 @@ namespace SourceGit.Views
             var actions = repo.GetCustomActions(Models.CustomActionScope.Remote);
             if (actions.Count == 0)
                 return;
-
-            var custom = new MenuItem();
-            custom.Header = App.Text("RemoteCM.CustomAction");
-            custom.Icon = App.CreateMenuIcon("Icons.Action");
 
             foreach (var action in actions)
             {
@@ -1328,10 +1319,9 @@ namespace SourceGit.Views
                     e.Handled = true;
                 };
 
-                custom.Items.Add(item);
+                menu.Items.Add(item);
             }
 
-            menu.Items.Add(custom);
             menu.Items.Add(new MenuItem() { Header = "-" });
         }
 
