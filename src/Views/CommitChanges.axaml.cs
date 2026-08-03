@@ -1,5 +1,4 @@
 using System;
-using System.Text;
 
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -25,11 +24,12 @@ namespace SourceGit.Views
             if (detailView == null)
                 return;
 
+            var paths = view.GetSelectedPaths();
             var container = view.FindDescendantOfType<ChangeCollectionContainer>();
             if (container is { SelectedItems.Count: 1, SelectedItem: ViewModels.ChangeTreeNode { IsFolder: true } node })
                 detailView.CreateChangeContextMenuByFolder(node, changes)?.Open(view);
-            else if (changes.Count > 1)
-                detailView.CreateMultipleChangesContextMenu(changes)?.Open(view);
+            else if (paths.Count > 1 || changes.Count > 1)
+                detailView.CreateMultipleChangesContextMenu(changes, paths)?.Open(view);
             else
                 detailView.CreateChangeContextMenu(changes[0])?.Open(view);
         }
@@ -39,30 +39,18 @@ namespace SourceGit.Views
             if (DataContext is not ViewModels.CommitDetail vm)
                 return;
 
-            if (sender is not ChangeCollectionView { SelectedChanges: { Count: > 0 } selectedChanges } view)
+            if (sender is not ChangeCollectionView { SelectedChanges: { Count: > 0 } } view)
                 return;
 
             var cmdKey = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
             if (e.Key == Key.C && e.KeyModifiers.HasFlag(cmdKey))
             {
-                var builder = new StringBuilder();
-                var copyAbsPath = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
-                var container = view.FindDescendantOfType<ChangeCollectionContainer>();
-                if (container is { SelectedItems.Count: 1, SelectedItem: ViewModels.ChangeTreeNode { IsFolder: true } node })
-                {
-                    builder.Append(copyAbsPath ? vm.GetAbsPath(node.FullPath) : node.FullPath);
-                }
-                else if (selectedChanges.Count == 1)
-                {
-                    builder.Append(copyAbsPath ? vm.GetAbsPath(selectedChanges[0].Path) : selectedChanges[0].Path);
-                }
+                var paths = view.GetSelectedPaths();
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                    await ChangeCollectionView.CopyFullPathsAsync(paths, vm.GetAbsPath);
                 else
-                {
-                    foreach (var c in selectedChanges)
-                        builder.AppendLine(copyAbsPath ? vm.GetAbsPath(c.Path) : c.Path);
-                }
+                    await ChangeCollectionView.CopyPathsAsync(paths);
 
-                await App.CopyTextAsync(builder.ToString());
                 e.Handled = true;
             }
             else if (e.Key == Key.F && e.KeyModifiers == cmdKey)

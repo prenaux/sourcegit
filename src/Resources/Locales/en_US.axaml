@@ -295,7 +295,10 @@
   <x:String x:Key="Text.Copy" xml:space="preserve">Copy</x:String>
   <x:String x:Key="Text.CopyAllText" xml:space="preserve">Copy All Text</x:String>
   <x:String x:Key="Text.CopyFullPath" xml:space="preserve">Copy Full Path</x:String>
+  <x:String x:Key="Text.CopyFullPaths" xml:space="preserve">Copy Full Paths</x:String>
   <x:String x:Key="Text.CopyPath" xml:space="preserve">Copy Path</x:String>
+  <x:String x:Key="Text.CopyPaths" xml:space="preserve">Copy Paths</x:String>
+  <x:String x:Key="Text.CopyPaths.TooMany" xml:space="preserve">Cannot copy more than {0} paths.</x:String>
   <x:String x:Key="Text.CreateBranch" xml:space="preserve">Create Branch...</x:String>
   <x:String x:Key="Text.CreateBranch.BasedOn" xml:space="preserve">Based On:</x:String>
   <x:String x:Key="Text.CreateBranch.Checkout" xml:space="preserve">Check out the created branch</x:String>

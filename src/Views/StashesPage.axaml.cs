@@ -1,6 +1,5 @@
 ﻿using System;
 using System.IO;
-using System.Text;
 
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -146,6 +145,7 @@ namespace SourceGit.Views
             if (DataContext is ViewModels.StashesPage { SelectedChanges: { Count: > 0 } selected } vm &&
                 sender is ChangeCollectionView view)
             {
+                var paths = view.GetSelectedPaths();
                 var menu = new ContextMenu();
 
                 if (selected.Count == 1)
@@ -197,46 +197,22 @@ namespace SourceGit.Views
                 };
 
                 var copyPath = new MenuItem();
-                copyPath.Header = App.Text("CopyPath");
+                copyPath.Header = App.Text(paths.Count == 1 ? "CopyPath" : "CopyPaths");
                 copyPath.Icon = App.CreateMenuIcon("Icons.Copy");
                 copyPath.Tag = OperatingSystem.IsMacOS() ? "⌘+C" : "Ctrl+C";
                 copyPath.Click += async (_, ev) =>
                 {
-                    if (selected.Count == 1)
-                    {
-                        await App.CopyTextAsync(selected[0].Path);
-                    }
-                    else
-                    {
-                        var builder = new StringBuilder();
-                        foreach (var c in selected)
-                            builder.AppendLine(c.Path);
-
-                        await App.CopyTextAsync(builder.ToString());
-                    }
-
+                    await ChangeCollectionView.CopyPathsAsync(paths);
                     ev.Handled = true;
                 };
 
                 var copyFullPath = new MenuItem();
-                copyFullPath.Header = App.Text("CopyFullPath");
+                copyFullPath.Header = App.Text(paths.Count == 1 ? "CopyFullPath" : "CopyFullPaths");
                 copyFullPath.Icon = App.CreateMenuIcon("Icons.Copy");
                 copyFullPath.Tag = OperatingSystem.IsMacOS() ? "⌘+⇧+C" : "Ctrl+Shift+C";
                 copyFullPath.Click += async (_, ev) =>
                 {
-                    if (selected.Count == 1)
-                    {
-                        await App.CopyTextAsync(vm.GetAbsPath(selected[0].Path));
-                    }
-                    else
-                    {
-                        var builder = new StringBuilder();
-                        foreach (var c in selected)
-                            builder.AppendLine(vm.GetAbsPath(c.Path));
-
-                        await App.CopyTextAsync(builder.ToString());
-                    }
-
+                    await ChangeCollectionView.CopyFullPathsAsync(paths, vm.GetAbsPath);
                     ev.Handled = true;
                 };
 
@@ -256,24 +232,17 @@ namespace SourceGit.Views
             if (DataContext is not ViewModels.StashesPage vm)
                 return;
 
-            if (sender is not ChangeCollectionView { SelectedChanges: { Count: > 0 } selectedChanges })
+            if (sender is not ChangeCollectionView { SelectedChanges: { Count: > 0 } } view)
                 return;
 
             if (e.KeyModifiers.HasFlag(OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control) && e.Key == Key.C)
             {
-                var builder = new StringBuilder();
-                var copyAbsPath = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
-                if (selectedChanges.Count == 1)
-                {
-                    builder.Append(copyAbsPath ? vm.GetAbsPath(selectedChanges[0].Path) : selectedChanges[0].Path);
-                }
+                var paths = view.GetSelectedPaths();
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                    await ChangeCollectionView.CopyFullPathsAsync(paths, vm.GetAbsPath);
                 else
-                {
-                    foreach (var c in selectedChanges)
-                        builder.AppendLine(copyAbsPath ? vm.GetAbsPath(c.Path) : c.Path);
-                }
+                    await ChangeCollectionView.CopyPathsAsync(paths);
 
-                await App.CopyTextAsync(builder.ToString());
                 e.Handled = true;
             }
         }

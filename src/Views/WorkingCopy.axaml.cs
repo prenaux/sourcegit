@@ -42,30 +42,30 @@ namespace SourceGit.Views
 
         private void OnUnstagedContextRequested(object sender, ContextRequestedEventArgs e)
         {
-            if (DataContext is ViewModels.WorkingCopy vm && sender is Control control)
+            if (DataContext is ViewModels.WorkingCopy vm && sender is ChangeCollectionView view)
             {
-                var container = control.FindDescendantOfType<ChangeCollectionContainer>();
+                var container = view.FindDescendantOfType<ChangeCollectionContainer>();
                 var selectedSingleFolder = string.Empty;
                 if (container is { SelectedItems.Count: 1, SelectedItem: ViewModels.ChangeTreeNode { IsFolder: true } node })
                     selectedSingleFolder = node.FullPath;
 
-                var menu = CreateContextMenuForUnstagedChanges(vm, selectedSingleFolder);
-                menu?.Open(control);
+                var menu = CreateContextMenuForUnstagedChanges(vm, selectedSingleFolder, view);
+                menu?.Open(view);
                 e.Handled = true;
             }
         }
 
         private void OnStagedContextRequested(object sender, ContextRequestedEventArgs e)
         {
-            if (DataContext is ViewModels.WorkingCopy vm && sender is Control control)
+            if (DataContext is ViewModels.WorkingCopy vm && sender is ChangeCollectionView view)
             {
-                var container = control.FindDescendantOfType<ChangeCollectionContainer>();
+                var container = view.FindDescendantOfType<ChangeCollectionContainer>();
                 var selectedSingleFolder = string.Empty;
                 if (container is { SelectedItems.Count: 1, SelectedItem: ViewModels.ChangeTreeNode { IsFolder: true } node })
                     selectedSingleFolder = node.FullPath;
 
-                var menu = CreateContextMenuForStagedChanges(vm, selectedSingleFolder);
-                menu?.Open(control);
+                var menu = CreateContextMenuForStagedChanges(vm, selectedSingleFolder, view);
+                menu?.Open(view);
                 e.Handled = true;
             }
         }
@@ -264,7 +264,7 @@ namespace SourceGit.Views
             e.Handled = true;
         }
 
-        private ContextMenu CreateContextMenuForUnstagedChanges(ViewModels.WorkingCopy vm, string selectedSingleFolder)
+        private ContextMenu CreateContextMenuForUnstagedChanges(ViewModels.WorkingCopy vm, string selectedSingleFolder, ChangeCollectionView view)
         {
             var repo = vm.Repository;
             var selectedUnstaged = vm.SelectedUnstaged;
@@ -694,28 +694,7 @@ namespace SourceGit.Views
 
                 TryToAddCustomActionsToContextMenu(repo, menu, change.Path);
 
-                var copy = new MenuItem();
-                copy.Header = App.Text("CopyPath");
-                copy.Icon = App.CreateMenuIcon("Icons.Copy");
-                copy.Tag = OperatingSystem.IsMacOS() ? "⌘+C" : "Ctrl+C";
-                copy.Click += async (_, e) =>
-                {
-                    await App.CopyTextAsync(hasSelectedFolder ? selectedSingleFolder : change.Path);
-                    e.Handled = true;
-                };
-
-                var copyFullPath = new MenuItem();
-                copyFullPath.Header = App.Text("CopyFullPath");
-                copyFullPath.Icon = App.CreateMenuIcon("Icons.Copy");
-                copyFullPath.Tag = OperatingSystem.IsMacOS() ? "⌘+⇧+C" : "Ctrl+Shift+C";
-                copyFullPath.Click += async (_, e) =>
-                {
-                    await App.CopyTextAsync(hasSelectedFolder ? Native.OS.GetAbsPath(repo.FullPath, selectedSingleFolder) : path);
-                    e.Handled = true;
-                };
-
-                menu.Items.Add(copy);
-                menu.Items.Add(copyFullPath);
+                AddCopyPathsToContextMenu(menu, view, repo.FullPath);
             }
             else
             {
@@ -897,40 +876,20 @@ namespace SourceGit.Views
                         e.Handled = true;
                     };
 
-                    var copy = new MenuItem();
-                    copy.Header = App.Text("CopyPath");
-                    copy.Icon = App.CreateMenuIcon("Icons.Copy");
-                    copy.Tag = OperatingSystem.IsMacOS() ? "⌘+C" : "Ctrl+C";
-                    copy.Click += async (_, e) =>
-                    {
-                        await App.CopyTextAsync(selectedSingleFolder);
-                        e.Handled = true;
-                    };
-
-                    var copyFullPath = new MenuItem();
-                    copyFullPath.Header = App.Text("CopyPath");
-                    copyFullPath.Icon = App.CreateMenuIcon("Icons.Copy");
-                    copyFullPath.Tag = OperatingSystem.IsMacOS() ? "⌘+⇧+C" : "Ctrl+Shift+C";
-                    copyFullPath.Click += async (_, e) =>
-                    {
-                        await App.CopyTextAsync(Native.OS.GetAbsPath(repo.FullPath, selectedSingleFolder));
-                        e.Handled = true;
-                    };
-
                     menu.Items.Add(new MenuItem() { Header = "-" });
                     menu.Items.Add(addToIgnore);
                     menu.Items.Add(new MenuItem() { Header = "-" });
                     menu.Items.Add(history);
-                    menu.Items.Add(new MenuItem() { Header = "-" });
-                    menu.Items.Add(copy);
-                    menu.Items.Add(copyFullPath);
                 }
+
+                menu.Items.Add(new MenuItem() { Header = "-" });
+                AddCopyPathsToContextMenu(menu, view, repo.FullPath);
             }
 
             return menu;
         }
 
-        public ContextMenu CreateContextMenuForStagedChanges(ViewModels.WorkingCopy vm, string selectedSingleFolder)
+        public ContextMenu CreateContextMenuForStagedChanges(ViewModels.WorkingCopy vm, string selectedSingleFolder, ChangeCollectionView view)
         {
             var repo = vm.Repository;
             var selectedStaged = vm.SelectedStaged;
@@ -1185,29 +1144,7 @@ namespace SourceGit.Views
 
                 TryToAddCustomActionsToContextMenu(repo, menu, change.Path);
 
-                var copyPath = new MenuItem();
-                copyPath.Header = App.Text("CopyPath");
-                copyPath.Icon = App.CreateMenuIcon("Icons.Copy");
-                copyPath.Tag = OperatingSystem.IsMacOS() ? "⌘+C" : "Ctrl+C";
-                copyPath.Click += async (_, e) =>
-                {
-                    await App.CopyTextAsync(hasSelectedFolder ? selectedSingleFolder : change.Path);
-                    e.Handled = true;
-                };
-
-                var copyFullPath = new MenuItem();
-                copyFullPath.Header = App.Text("CopyFullPath");
-                copyFullPath.Icon = App.CreateMenuIcon("Icons.Copy");
-                copyFullPath.Tag = OperatingSystem.IsMacOS() ? "⌘+⇧+C" : "Ctrl+Shift+C";
-                copyFullPath.Click += async (_, e) =>
-                {
-                    var target = hasSelectedFolder ? Native.OS.GetAbsPath(repo.FullPath, selectedSingleFolder) : path;
-                    await App.CopyTextAsync(target);
-                    e.Handled = true;
-                };
-
-                menu.Items.Add(copyPath);
-                menu.Items.Add(copyFullPath);
+                AddCopyPathsToContextMenu(menu, view, repo.FullPath);
             }
             else
             {
@@ -1308,35 +1245,45 @@ namespace SourceGit.Views
                         e.Handled = true;
                     };
 
-                    var copyPath = new MenuItem();
-                    copyPath.Header = App.Text("CopyPath");
-                    copyPath.Icon = App.CreateMenuIcon("Icons.Copy");
-                    copyPath.Tag = OperatingSystem.IsMacOS() ? "⌘+C" : "Ctrl+C";
-                    copyPath.Click += async (_, e) =>
-                    {
-                        await App.CopyTextAsync(selectedSingleFolder);
-                        e.Handled = true;
-                    };
-
-                    var copyFullPath = new MenuItem();
-                    copyFullPath.Header = App.Text("CopyFullPath");
-                    copyFullPath.Icon = App.CreateMenuIcon("Icons.Copy");
-                    copyFullPath.Tag = OperatingSystem.IsMacOS() ? "⌘+⇧+C" : "Ctrl+Shift+C";
-                    copyFullPath.Click += async (_, e) =>
-                    {
-                        await App.CopyTextAsync(Native.OS.GetAbsPath(repo.FullPath, selectedSingleFolder));
-                        e.Handled = true;
-                    };
-
                     menu.Items.Add(new MenuItem() { Header = "-" });
                     menu.Items.Add(history);
-                    menu.Items.Add(new MenuItem() { Header = "-" });
-                    menu.Items.Add(copyPath);
-                    menu.Items.Add(copyFullPath);
                 }
+
+                menu.Items.Add(new MenuItem() { Header = "-" });
+                AddCopyPathsToContextMenu(menu, view, repo.FullPath);
             }
 
             return menu;
+        }
+
+        private void AddCopyPathsToContextMenu(ContextMenu menu, ChangeCollectionView view, string repo)
+        {
+            var paths = view.GetSelectedPaths();
+            if (paths.Count == 0)
+                return;
+
+            var copyPath = new MenuItem();
+            copyPath.Header = App.Text(paths.Count == 1 ? "CopyPath" : "CopyPaths");
+            copyPath.Icon = App.CreateMenuIcon("Icons.Copy");
+            copyPath.Tag = OperatingSystem.IsMacOS() ? "⌘+C" : "Ctrl+C";
+            copyPath.Click += async (_, e) =>
+            {
+                await ChangeCollectionView.CopyPathsAsync(paths);
+                e.Handled = true;
+            };
+
+            var copyFullPath = new MenuItem();
+            copyFullPath.Header = App.Text(paths.Count == 1 ? "CopyFullPath" : "CopyFullPaths");
+            copyFullPath.Icon = App.CreateMenuIcon("Icons.Copy");
+            copyFullPath.Tag = OperatingSystem.IsMacOS() ? "⌘+⇧+C" : "Ctrl+Shift+C";
+            copyFullPath.Click += async (_, e) =>
+            {
+                await ChangeCollectionView.CopyFullPathsAsync(paths, path => Native.OS.GetAbsPath(repo, path));
+                e.Handled = true;
+            };
+
+            menu.Items.Add(copyPath);
+            menu.Items.Add(copyFullPath);
         }
 
         private void TryAddOpenFileToContextMenu(ContextMenu menu, string fullpath)

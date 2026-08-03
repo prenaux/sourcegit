@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
+using System.Threading.Tasks;
 
 using Avalonia;
 using Avalonia.Controls;
@@ -52,6 +54,8 @@ namespace SourceGit.Views
 
     public partial class ChangeCollectionView : UserControl
     {
+        public const int MaxClipboardPathCount = 10000;
+
         public static readonly StyledProperty<bool> IsUnstagedChangeProperty =
             AvaloniaProperty.Register<ChangeCollectionView, bool>(nameof(IsUnstagedChange));
 
@@ -109,6 +113,50 @@ namespace SourceGit.Views
         public ChangeCollectionView()
         {
             InitializeComponent();
+        }
+
+        public List<string> GetSelectedPaths()
+        {
+            var paths = new List<string>();
+            var selectedItems = this.FindDescendantOfType<ChangeCollectionContainer>()?.SelectedItems;
+            if (selectedItems == null)
+                return paths;
+
+            var unique = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var item in selectedItems)
+            {
+                var path = item switch
+                {
+                    Models.Change change => change.Path,
+                    ViewModels.ChangeTreeNode node => node.FullPath,
+                    _ => null,
+                };
+
+                if (!string.IsNullOrEmpty(path) && unique.Add(path))
+                    paths.Add(path);
+            }
+
+            return paths;
+        }
+
+        public static async Task CopyPathsAsync(List<string> paths)
+        {
+            if (!ValidateClipboardPathCount(paths))
+                return;
+
+            await CopyValidatedPathsAsync(paths);
+        }
+
+        public static async Task CopyFullPathsAsync(List<string> paths, Func<string, string> getAbsPath)
+        {
+            if (!ValidateClipboardPathCount(paths))
+                return;
+
+            var fullPaths = new List<string>(paths.Count);
+            foreach (var path in paths)
+                fullPaths.Add(getAbsPath(path));
+
+            await CopyValidatedPathsAsync(fullPaths);
         }
 
         public void ToggleNodeIsExpanded(ViewModels.ChangeTreeNode node)
@@ -468,6 +516,33 @@ namespace SourceGit.Views
             }
 
             ToolTip.SetTip(control, tip);
+        }
+
+        private static bool ValidateClipboardPathCount(List<string> paths)
+        {
+            if (paths.Count <= MaxClipboardPathCount)
+                return true;
+
+            App.RaiseException(null, App.Text("CopyPaths.TooMany", MaxClipboardPathCount));
+            return false;
+        }
+
+        private static async Task CopyValidatedPathsAsync(List<string> paths)
+        {
+            if (paths.Count == 0)
+                return;
+
+            if (paths.Count == 1)
+            {
+                await App.CopyTextAsync(paths[0]);
+                return;
+            }
+
+            var builder = new StringBuilder();
+            foreach (var path in paths)
+                builder.AppendLine(path);
+
+            await App.CopyTextAsync(builder.ToString());
         }
 
         private bool _disableSelectionChangingEvent = false;

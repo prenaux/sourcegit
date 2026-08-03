@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
 
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -117,7 +116,7 @@ namespace SourceGit.Views
             return menu;
         }
 
-        public ContextMenu CreateMultipleChangesContextMenu(List<Models.Change> changes)
+        public ContextMenu CreateMultipleChangesContextMenu(List<Models.Change> changes, List<string> paths)
         {
             if (DataContext is not ViewModels.CommitDetail { Repository: { } repo, Commit: { } commit } vm)
                 return null;
@@ -194,30 +193,22 @@ namespace SourceGit.Views
             }
 
             var copyPath = new MenuItem();
-            copyPath.Header = App.Text("CopyPath");
+            copyPath.Header = App.Text(paths.Count == 1 ? "CopyPath" : "CopyPaths");
             copyPath.Icon = App.CreateMenuIcon("Icons.Copy");
             copyPath.Tag = OperatingSystem.IsMacOS() ? "⌘+C" : "Ctrl+C";
             copyPath.Click += async (_, ev) =>
             {
-                var builder = new StringBuilder();
-                foreach (var c in changes)
-                    builder.AppendLine(c.Path);
-
-                await App.CopyTextAsync(builder.ToString());
+                await ChangeCollectionView.CopyPathsAsync(paths);
                 ev.Handled = true;
             };
 
             var copyFullPath = new MenuItem();
-            copyFullPath.Header = App.Text("CopyFullPath");
+            copyFullPath.Header = App.Text(paths.Count == 1 ? "CopyFullPath" : "CopyFullPaths");
             copyFullPath.Icon = App.CreateMenuIcon("Icons.Copy");
             copyFullPath.Tag = OperatingSystem.IsMacOS() ? "⌘+⇧+C" : "Ctrl+Shift+C";
             copyFullPath.Click += async (_, e) =>
             {
-                var builder = new StringBuilder();
-                foreach (var c in changes)
-                    builder.AppendLine(Native.OS.GetAbsPath(repo.FullPath, c.Path));
-
-                await App.CopyTextAsync(builder.ToString());
+                await ChangeCollectionView.CopyFullPathsAsync(paths, vm.GetAbsPath);
                 e.Handled = true;
             };
 
