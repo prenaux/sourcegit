@@ -153,6 +153,33 @@ namespace SourceGit.Views
             }
         }
 
+        public void ExpandAllChildren(ViewModels.TagTreeNode folder = null)
+        {
+            if (Content is not ViewModels.TagCollectionAsTree tree)
+                return;
+
+            if (folder != null)
+                tree.ExpandAllChildren(folder);
+            else
+                foreach (var node in tree.Tree)
+                    tree.ExpandAllChildren(node);
+
+            Rows = tree.Rows.Count;
+            RaiseEvent(new RoutedEventArgs(RowsChangedEvent));
+        }
+
+        private ContextMenu CreateTreeContextMenu(ContextMenu menu, ListBox listBox)
+        {
+            if (Content is not ViewModels.TagCollectionAsTree)
+                return menu;
+
+            var folder = listBox.SelectedItems is [ViewModels.TagTreeNode { IsFolder: true } node] ? node : null;
+            if (folder == null && listBox.SelectedItems is { Count: > 0 })
+                return menu;
+
+            return TreeExpansionMenu.AppendExpandAllChildren(menu, () => ExpandAllChildren(folder));
+        }
+
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
             base.OnPropertyChanged(change);
@@ -216,8 +243,23 @@ namespace SourceGit.Views
 
         private void OnTagsContextMenuRequested(object sender, ContextRequestedEventArgs e)
         {
-            if (sender is not ListBox { SelectedItems: { Count: > 0 } selectedItems } listBox)
+            if (sender is not ListBox listBox)
                 return;
+
+            if (Content is ViewModels.TagCollectionAsTree && TreeExpansionMenu.IsRequestedOnEmptySpace(this, e))
+            {
+                TreeExpansionMenu.AppendExpandAllChildren(null, () => ExpandAllChildren()).Open(listBox);
+                e.Handled = true;
+                return;
+            }
+
+            var selectedItems = listBox.SelectedItems;
+            if (selectedItems == null || selectedItems.Count == 0)
+            {
+                CreateTreeContextMenu(null, listBox)?.Open(listBox);
+                e.Handled = true;
+                return;
+            }
 
             if (DataContext is not ViewModels.Repository repo)
                 return;
@@ -365,7 +407,7 @@ namespace SourceGit.Views
                 }
 
                 menu.Items.Add(copy);
-                menu.Open(listBox);
+                CreateTreeContextMenu(menu, listBox)?.Open(listBox);
             }
             else if (selected.Count > 0)
             {
@@ -400,7 +442,7 @@ namespace SourceGit.Views
                 };
 
                 menu.Items.Add(deleteMultiple);
-                menu.Open(listBox);
+                CreateTreeContextMenu(menu, listBox)?.Open(listBox);
             }
 
             e.Handled = true;

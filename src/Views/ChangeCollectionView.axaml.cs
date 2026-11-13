@@ -83,6 +83,15 @@ namespace SourceGit.Views
             set => SetValue(EnableCompactFoldersProperty, value);
         }
 
+        public static readonly StyledProperty<Models.TreeExpansionState> ExpansionStateProperty =
+            AvaloniaProperty.Register<ChangeCollectionView, Models.TreeExpansionState>(nameof(ExpansionState));
+
+        public Models.TreeExpansionState ExpansionState
+        {
+            get => GetValue(ExpansionStateProperty) ?? _expansionState;
+            set => SetValue(ExpansionStateProperty, value);
+        }
+
         public static readonly StyledProperty<List<Models.Change>> ChangesProperty =
             AvaloniaProperty.Register<ChangeCollectionView, List<Models.Change>>(nameof(Changes));
 
@@ -163,7 +172,7 @@ namespace SourceGit.Views
         {
             if (Content is ViewModels.ChangeCollectionAsTree tree && node.IsFolder)
             {
-                node.IsExpanded = !node.IsExpanded;
+                node.SetExpanded(ExpansionState, !node.IsExpanded);
 
                 var depth = node.Depth;
                 var idx = tree.Rows.IndexOf(node);
@@ -191,6 +200,33 @@ namespace SourceGit.Views
                     tree.Rows.RemoveRange(idx + 1, removeCount);
                 }
             }
+        }
+
+        public ContextMenu CreateTreeContextMenu(ContextMenu menu = null)
+        {
+            if (Content is not ViewModels.ChangeCollectionAsTree)
+                return menu;
+
+            var selected = this.FindDescendantOfType<ChangeCollectionContainer>()?.SelectedItems;
+            var folder = selected is [ViewModels.ChangeTreeNode { IsFolder: true } node] ? node : null;
+            if (folder == null && selected is { Count: > 0 })
+                return menu;
+
+            return TreeExpansionMenu.AppendExpandAllChildren(menu, () => ExpandAllChildren(folder));
+        }
+
+        public void ExpandAllChildren(ViewModels.ChangeTreeNode folder = null)
+        {
+            if (Content is not ViewModels.ChangeCollectionAsTree tree)
+                return;
+
+            if (folder != null)
+                folder.ExpandAllChildren(ExpansionState);
+            else
+                foreach (var node in tree.Tree)
+                    node.ExpandAllChildren(ExpansionState);
+
+            UpdateDataSource(false);
         }
 
         public Models.Change GetNextChangeWithoutSelection()
@@ -266,7 +302,7 @@ namespace SourceGit.Views
         {
             base.OnPropertyChanged(change);
 
-            if (change.Property == ViewModeProperty)
+            if (change.Property == ViewModeProperty || change.Property == ExpansionStateProperty)
                 UpdateDataSource(true);
             else if (change.Property == ChangesProperty)
                 UpdateDataSource(false);
@@ -275,6 +311,16 @@ namespace SourceGit.Views
 
             if (change.Property == EnableCompactFoldersProperty && ViewMode == Models.ChangeViewMode.Tree)
                 UpdateDataSource(true);
+        }
+
+        private void OnTreeContextRequested(object sender, ContextRequestedEventArgs e)
+        {
+            if (sender is ChangeCollectionContainer { SelectedItems.Count: > 0 } &&
+                !TreeExpansionMenu.IsRequestedOnEmptySpace(this, e))
+                return;
+
+            TreeExpansionMenu.AppendExpandAllChildren(null, () => ExpandAllChildren()).Open(this);
+            e.Handled = true;
         }
 
         private void OnRowDataContextChanged(object sender, EventArgs e)
@@ -394,18 +440,8 @@ namespace SourceGit.Views
             var selected = SelectedChanges ?? [];
             if (ViewMode == Models.ChangeViewMode.Tree)
             {
-                HashSet<string> oldFolded = new HashSet<string>();
-                if (Content is ViewModels.ChangeCollectionAsTree oldTree)
-                {
-                    foreach (var row in oldTree.Rows)
-                    {
-                        if (row.IsFolder && !row.IsExpanded)
-                            oldFolded.Add(row.FullPath);
-                    }
-                }
-
                 var tree = new ViewModels.ChangeCollectionAsTree();
-                tree.Tree = ViewModels.ChangeTreeNode.Build(changes, oldFolded, EnableCompactFolders);
+                tree.Tree = ViewModels.ChangeTreeNode.Build(changes, ExpansionState, EnableCompactFolders);
 
                 var rows = new List<ViewModels.ChangeTreeNode>();
                 MakeTreeRows(rows, tree.Tree);
@@ -545,6 +581,7 @@ namespace SourceGit.Views
             await App.CopyTextAsync(builder.ToString());
         }
 
+        private readonly Models.TreeExpansionState _expansionState = new();
         private bool _disableSelectionChangingEvent = false;
     }
 }

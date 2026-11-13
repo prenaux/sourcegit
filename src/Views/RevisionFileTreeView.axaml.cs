@@ -195,6 +195,15 @@ namespace SourceGit.Views
             set => SetValue(RevisionProperty, value);
         }
 
+        public static readonly StyledProperty<Models.TreeExpansionState> ExpansionStateProperty =
+            AvaloniaProperty.Register<RevisionFileTreeView, Models.TreeExpansionState>(nameof(ExpansionState));
+
+        public Models.TreeExpansionState ExpansionState
+        {
+            get => GetValue(ExpansionStateProperty) ?? _expansionState;
+            set => SetValue(ExpansionStateProperty, value);
+        }
+
         public AvaloniaList<ViewModels.RevisionFileTreeNode> Rows { get; } = [];
 
         public static readonly RoutedEvent<RoutedEventArgs> SearchRequestedEvent =
@@ -213,12 +222,17 @@ namespace SourceGit.Views
 
         public async Task SetSearchResultAsync(string file)
         {
+            var version = _treeVersion;
             Rows.Clear();
             _searchResult.Clear();
 
             var rows = new List<ViewModels.RevisionFileTreeNode>();
             if (string.IsNullOrEmpty(file))
             {
+                await RestoreExpansionStatesAsync(_tree);
+                if (version != _treeVersion)
+                    return;
+
                 MakeRows(rows, _tree, 0);
             }
             else
@@ -228,7 +242,7 @@ namespace SourceGit.Views
                     return;
 
                 var objects = await vm.GetRevisionFilesUnderFolderAsync(file);
-                if (objects is not { Count: 1 })
+                if (version != _treeVersion || objects is not { Count: 1 })
                     return;
 
                 var routes = file.Split('/');
@@ -275,47 +289,88 @@ namespace SourceGit.Views
 
         public async Task ToggleNodeIsExpandedAsync(ViewModels.RevisionFileTreeNode node)
         {
-            _disableSelectionChangingEvent = true;
-            node.IsExpanded = !node.IsExpanded;
-
-            var depth = node.Depth;
             var idx = Rows.IndexOf(node);
-            if (idx == -1)
+            if (idx == -1 || !node.IsFolder)
                 return;
 
-            if (node.IsExpanded)
+            var version = _treeVersion;
+            node.IsExpanded = !node.IsExpanded;
+            ExpansionState.SetExpanded(node.Backend.Path, node.IsExpanded);
+            _disableSelectionChangingEvent = true;
+            try
             {
-                var subtree = await GetChildrenOfTreeNodeAsync(node);
-                if (subtree is { Count: > 0 })
+                if (node.IsExpanded)
                 {
-                    var subrows = new List<ViewModels.RevisionFileTreeNode>();
-                    MakeRows(subrows, subtree, depth + 1);
-                    Rows.InsertRange(idx + 1, subrows);
+                    var subtree = await GetChildrenOfTreeNodeAsync(node);
+                    idx = Rows.IndexOf(node);
+                    if (version != _treeVersion || idx == -1 || !node.IsExpanded)
+                        return;
+
+                    if (subtree is { Count: > 0 })
+                    {
+                        var subrows = new List<ViewModels.RevisionFileTreeNode>();
+                        MakeRows(subrows, subtree, node.Depth + 1);
+                        Rows.InsertRange(idx + 1, subrows);
+                    }
+                }
+                else
+                {
+                    var removeCount = 0;
+                    for (int i = idx + 1; i < Rows.Count; i++)
+                    {
+                        if (Rows[i].Depth <= node.Depth)
+                            break;
+
+                        removeCount++;
+                    }
+                    Rows.RemoveRange(idx + 1, removeCount);
                 }
             }
+            finally
+            {
+                _disableSelectionChangingEvent = false;
+            }
+        }
+
+        public async Task ExpandAllChildrenAsync(ViewModels.RevisionFileTreeNode folder = null)
+        {
+            var version = _treeVersion;
+            if (folder != null)
+                await ExpandNodeAndChildrenAsync(folder, version);
             else
-            {
-                var removeCount = 0;
-                for (int i = idx + 1; i < Rows.Count; i++)
-                {
-                    var row = Rows[i];
-                    if (row.Depth <= depth)
-                        break;
+                foreach (var node in _searchResult.Count > 0 ? _searchResult.ToArray() : _tree.ToArray())
+                    await ExpandNodeAndChildrenAsync(node, version);
+        }
 
-                    removeCount++;
-                }
-                Rows.RemoveRange(idx + 1, removeCount);
-            }
+        private async Task ExpandNodeAndChildrenAsync(ViewModels.RevisionFileTreeNode node, int version)
+        {
+            if (version != _treeVersion || !node.IsFolder)
+                return;
 
-            _disableSelectionChangingEvent = false;
+            if (!node.IsExpanded)
+                await ToggleNodeIsExpandedAsync(node);
+
+            if (version != _treeVersion)
+                return;
+
+            ExpansionState.SetExpanded(node.Backend.Path, true);
+            foreach (var child in node.Children)
+                await ExpandNodeAndChildrenAsync(child, version);
+        }
+
+        private void OnTreeContextRequested(object sender, ContextRequestedEventArgs e)
+        {
+            TreeExpansionMenu.AppendExpandAllChildren(null, async () => await ExpandAllChildrenAsync()).Open(this);
+            e.Handled = true;
         }
 
         protected override async void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
             base.OnPropertyChanged(change);
 
-            if (change.Property == RevisionProperty)
+            if (change.Property == RevisionProperty || change.Property == ExpansionStateProperty)
             {
+                _treeVersion++;
                 _tree.Clear();
                 _searchResult.Clear();
 
@@ -344,6 +399,9 @@ namespace SourceGit.Views
                     Models.ObjectType.Tree => CreateRevisionFileContextMenuByFolder(repo, vm, commit, obj.Path),
                     _ => CreateRevisionFileContextMenu(repo, vm, commit, obj),
                 };
+                if (grid.DataContext is ViewModels.RevisionFileTreeNode { IsFolder: true } folder)
+                    TreeExpansionMenu.AppendExpandAllChildren(menu, async () => await ExpandAllChildrenAsync(folder));
+
                 menu.Open(grid);
             }
 
@@ -379,20 +437,36 @@ namespace SourceGit.Views
                 return null;
 
             if (node.Children.Count > 0)
+            {
+                await RestoreExpansionStatesAsync(node.Children);
                 return node.Children;
+            }
 
             if (DataContext is not ViewModels.CommitDetail vm)
                 return null;
 
+            var version = _treeVersion;
             var objects = await vm.GetRevisionFilesUnderFolderAsync(node.Backend.Path + "/");
-            if (objects == null || objects.Count == 0)
+            if (version != _treeVersion || objects == null || objects.Count == 0)
                 return null;
 
             foreach (var obj in objects)
-                node.Children.Add(new ViewModels.RevisionFileTreeNode() { Backend = obj });
+            {
+                if (version != _treeVersion)
+                    return null;
+
+                var child = new ViewModels.RevisionFileTreeNode
+                {
+                    Backend = obj,
+                    IsExpanded = obj.Type == Models.ObjectType.Tree && ExpansionState.GetIsExpanded(obj.Path, false),
+                };
+                node.Children.Add(child);
+                if (child.IsExpanded)
+                    await GetChildrenOfTreeNodeAsync(child);
+            }
 
             SortNodes(node.Children);
-            return node.Children;
+            return version == _treeVersion ? node.Children : null;
         }
 
         private void MakeRows(List<ViewModels.RevisionFileTreeNode> rows, List<ViewModels.RevisionFileTreeNode> nodes, int depth)
@@ -409,6 +483,22 @@ namespace SourceGit.Views
             }
         }
 
+        private async Task RestoreExpansionStatesAsync(List<ViewModels.RevisionFileTreeNode> nodes)
+        {
+            var version = _treeVersion;
+            foreach (var node in nodes.ToArray())
+            {
+                if (version != _treeVersion)
+                    return;
+                if (!node.IsFolder)
+                    continue;
+
+                node.IsExpanded = ExpansionState.GetIsExpanded(node.Backend.Path, node.IsExpanded);
+                if (node.IsExpanded)
+                    await GetChildrenOfTreeNodeAsync(node);
+            }
+        }
+
         private void SortNodes(List<ViewModels.RevisionFileTreeNode> nodes)
         {
             nodes.Sort((l, r) =>
@@ -421,37 +511,44 @@ namespace SourceGit.Views
 
         private async Task ReloadTreeData(ViewModels.CommitDetail vm)
         {
-            if (_isReloadingTreeData)
-                return;
-
-            _isReloadingTreeData = true;
-
+            var version = ++_treeVersion;
             if (vm?.Commit == null)
             {
                 Rows.Clear();
-                _isReloadingTreeData = false;
                 return;
             }
 
             var objects = await vm.GetRevisionFilesUnderFolderAsync(null);
-            if (objects == null || objects.Count == 0)
-            {
-                Rows.Clear();
-                _isReloadingTreeData = false;
+            if (version != _treeVersion)
                 return;
+
+            var tree = new List<ViewModels.RevisionFileTreeNode>();
+            foreach (var obj in objects ?? [])
+            {
+                if (version != _treeVersion)
+                    return;
+
+                var node = new ViewModels.RevisionFileTreeNode
+                {
+                    Backend = obj,
+                    IsExpanded = obj.Type == Models.ObjectType.Tree && ExpansionState.GetIsExpanded(obj.Path, false),
+                };
+                tree.Add(node);
+                if (node.IsExpanded)
+                    await GetChildrenOfTreeNodeAsync(node);
             }
 
-            foreach (var obj in objects)
-                _tree.Add(new ViewModels.RevisionFileTreeNode { Backend = obj });
+            if (version != _treeVersion)
+                return;
 
-            SortNodes(_tree);
+            SortNodes(tree);
+            _tree = tree;
 
             var topTree = new List<ViewModels.RevisionFileTreeNode>();
             MakeRows(topTree, _tree, 0);
 
             Rows.Clear();
             Rows.AddRange(topTree);
-            _isReloadingTreeData = false;
         }
 
         private ContextMenu CreateRevisionFileContextMenuByFolder(ViewModels.Repository repo, ViewModels.CommitDetail vm, Models.Commit commit, string path)
@@ -750,6 +847,7 @@ namespace SourceGit.Views
         private List<ViewModels.RevisionFileTreeNode> _tree = [];
         private bool _disableSelectionChangingEvent = false;
         private List<ViewModels.RevisionFileTreeNode> _searchResult = [];
-        private bool _isReloadingTreeData = false;
+        private readonly Models.TreeExpansionState _expansionState = new();
+        private int _treeVersion;
     }
 }

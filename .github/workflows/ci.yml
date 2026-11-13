@@ -7,8 +7,36 @@ on:
   workflow_dispatch:
   workflow_call:
 jobs:
+  tests:
+    name: Tree state regressions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Test tree expansion state
+        run: dotnet run --project tests/TreeState/TreeState.csproj -p:DisableAOT=true
+      - name: Check tree state formatting
+        run: >-
+          dotnet format whitespace src/SourceGit.csproj --no-restore --verify-no-changes --include
+          src/Models/RepositoryUIStates.cs src/Models/TreeExpansionState.cs
+          src/ViewModels/BranchTreeNode.cs src/ViewModels/ChangeTreeNode.cs
+          src/ViewModels/Compare.cs src/ViewModels/Repository.cs src/ViewModels/RevisionCompare.cs
+          src/ViewModels/StashesPage.cs src/ViewModels/SubmoduleCollection.cs src/ViewModels/TagCollection.cs
+          src/Views/BranchTree.axaml.cs src/Views/ChangeCollectionView.axaml.cs src/Views/CommitChanges.axaml.cs
+          src/Views/Compare.axaml.cs src/Views/RevisionCompare.axaml.cs src/Views/RevisionFileTreeView.axaml.cs
+          src/Views/StashesPage.axaml.cs src/Views/SubmodulesView.axaml.cs src/Views/TagsView.axaml.cs
+          src/Views/TreeExpansionMenu.cs src/Views/WorkingCopy.axaml.cs
+      - name: Check regression formatting
+        run: dotnet format whitespace tests/TreeState/TreeState.csproj --no-restore --verify-no-changes --include tests/TreeState/Program.cs
   build:
     name: Build
+    needs: tests
     uses: ./.github/workflows/build.yml
   version:
     name: Prepare version string

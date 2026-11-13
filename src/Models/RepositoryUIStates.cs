@@ -207,6 +207,17 @@ namespace SourceGit.Models
             set;
         } = [];
 
+        public TreeExpansionState UnstagedTreeExpansion { get; set; } = new();
+        public TreeExpansionState StagedTreeExpansion { get; set; } = new();
+        public TreeExpansionState CommitChangeTreeExpansion { get; set; } = new();
+        public TreeExpansionState CompareChangeTreeExpansion { get; set; } = new();
+        public TreeExpansionState RevisionCompareTreeExpansion { get; set; } = new();
+        public TreeExpansionState StashChangeTreeExpansion { get; set; } = new();
+        public TreeExpansionState BranchTreeExpansion { get; set; } = new();
+        public TreeExpansionState TagTreeExpansion { get; set; } = new();
+        public TreeExpansionState SubmoduleTreeExpansion { get; set; } = new();
+        public TreeExpansionState RevisionFileTreeExpansion { get; set; } = new();
+
         public string LastCommitMessage
         {
             get;

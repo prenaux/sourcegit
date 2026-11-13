@@ -10,6 +10,8 @@ namespace SourceGit.ViewModels
 {
     public class Compare : ObservableObject
     {
+        public Models.TreeExpansionState ChangeTreeExpansion { get; }
+
         public bool IsLoading
         {
             get => _isLoading;
@@ -91,6 +93,7 @@ namespace SourceGit.ViewModels
         public Compare(Repository repo, object based, object to)
         {
             _repo = repo.FullPath;
+            ChangeTreeExpansion = repo.UIStates.CompareChangeTreeExpansion;
             _canResetFiles = !repo.IsBare;
             _based = GetSHA(based);
             _to = GetSHA(to);

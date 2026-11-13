@@ -221,7 +221,7 @@ namespace SourceGit.Views
                 menu.Items.Add(new MenuItem { Header = "-" });
                 menu.Items.Add(copyPath);
                 menu.Items.Add(copyFullPath);
-                menu.Open(view);
+                view.CreateTreeContextMenu(menu)?.Open(view);
             }
 
             e.Handled = true;

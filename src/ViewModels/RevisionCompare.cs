@@ -11,6 +11,8 @@ namespace SourceGit.ViewModels
 {
     public class RevisionCompare : ObservableObject, IDisposable
     {
+        public Models.TreeExpansionState ChangeTreeExpansion { get; }
+
         public bool IsLoading
         {
             get => _isLoading;
@@ -105,6 +107,7 @@ namespace SourceGit.ViewModels
         public RevisionCompare(Repository repo, Models.Commit startPoint, Models.Commit endPoint)
         {
             _repo = repo;
+            ChangeTreeExpansion = repo.UIStates.RevisionCompareTreeExpansion;
             _startPoint = (object)startPoint ?? new Models.Null();
             _endPoint = (object)endPoint ?? new Models.Null();
             Refresh();

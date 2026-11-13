@@ -11,6 +11,8 @@ namespace SourceGit.ViewModels
 {
     public class StashesPage : ObservableObject, IDisposable
     {
+        public Models.TreeExpansionState ChangeTreeExpansion { get; }
+
         public List<Models.Stash> Stashes
         {
             get => _stashes;
@@ -124,6 +126,7 @@ namespace SourceGit.ViewModels
         public StashesPage(Repository repo)
         {
             _repo = repo;
+            ChangeTreeExpansion = repo.UIStates.StashChangeTreeExpansion;
         }
 
         public void Dispose()

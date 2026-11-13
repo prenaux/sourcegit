@@ -46,9 +46,39 @@ namespace SourceGit.ViewModels
             FullPath = path;
             DisplayName = Path.GetFileName(path);
             IsExpanded = isExpanded;
+            _firstFolderPath = path;
         }
 
-        public static List<ChangeTreeNode> Build(IList<Models.Change> changes, HashSet<string> folded, bool compactFolders)
+        public void SetExpanded(Models.TreeExpansionState state, bool isExpanded)
+        {
+            if (!IsFolder)
+                return;
+
+            IsExpanded = isExpanded;
+            var end = _firstFolderPath.Length;
+            while (true)
+            {
+                state.SetExpanded(FullPath.Substring(0, end), isExpanded);
+                if (end == FullPath.Length)
+                    break;
+
+                end = FullPath.IndexOf('/', end + 1);
+                if (end < 0)
+                    end = FullPath.Length;
+            }
+        }
+
+        public void ExpandAllChildren(Models.TreeExpansionState state)
+        {
+            if (!IsFolder)
+                return;
+
+            SetExpanded(state, true);
+            foreach (var child in Children)
+                child.ExpandAllChildren(state);
+        }
+
+        public static List<ChangeTreeNode> Build(IList<Models.Change> changes, Models.TreeExpansionState state, bool compactFolders)
         {
             var nodes = new List<ChangeTreeNode>();
             var folders = new Dictionary<string, ChangeTreeNode>();
@@ -73,13 +103,13 @@ namespace SourceGit.ViewModels
                         }
                         else if (lastFolder == null)
                         {
-                            lastFolder = new ChangeTreeNode(folder, !folded.Contains(folder));
+                            lastFolder = new ChangeTreeNode(folder, state.GetIsExpanded(folder, true));
                             folders.Add(folder, lastFolder);
                             InsertFolder(nodes, lastFolder);
                         }
                         else
                         {
-                            var cur = new ChangeTreeNode(folder, !folded.Contains(folder));
+                            var cur = new ChangeTreeNode(folder, state.GetIsExpanded(folder, true));
                             folders.Add(folder, cur);
                             InsertFolder(lastFolder.Children, cur);
                             lastFolder = cur;
@@ -137,7 +167,7 @@ namespace SourceGit.ViewModels
 
             node.FullPath = $"{node.FullPath}/{child.DisplayName}";
             node.DisplayName = $"{node.DisplayName} / {child.DisplayName}";
-            node.IsExpanded = child.IsExpanded;
+            node.IsExpanded &= child.IsExpanded;
             node.Children = child.Children;
             Compact(node);
         }
@@ -159,6 +189,7 @@ namespace SourceGit.ViewModels
             });
         }
 
+        private string _firstFolderPath;
         private bool _isExpanded = true;
     }
 }

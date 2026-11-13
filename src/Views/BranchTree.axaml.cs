@@ -336,6 +336,7 @@ namespace SourceGit.Views
                 if (!node.IsExpanded)
                 {
                     node.IsExpanded = true;
+                    (DataContext as ViewModels.Repository)?.UpdateBranchNodeIsExpanded(node);
 
                     var idx = rows.IndexOf(node);
                     var subtree = new List<ViewModels.BranchTreeNode>();
@@ -394,6 +395,38 @@ namespace SourceGit.Views
 
             RaiseEvent(new RoutedEventArgs(RowsChangedEvent));
             _disableSelectionChangingEvent = false;
+        }
+
+        public void ExpandAllChildren(ViewModels.BranchTreeNode folder = null)
+        {
+            if (folder != null)
+                ExpandBranchNode(folder);
+            else if (Nodes != null)
+                foreach (var node in Nodes)
+                    ExpandBranchNode(node);
+        }
+
+        private void ExpandBranchNode(ViewModels.BranchTreeNode node)
+        {
+            if (node.IsBranch)
+                return;
+
+            if (!node.IsExpanded)
+                ToggleNodeIsExpanded(node);
+
+            (DataContext as ViewModels.Repository)?.UpdateBranchNodeIsExpanded(node);
+            foreach (var child in node.Children)
+                ExpandBranchNode(child);
+        }
+
+        private ContextMenu CreateTreeContextMenu(ContextMenu menu = null)
+        {
+            var selected = BranchesPresenter.SelectedItems;
+            var folder = selected is [ViewModels.BranchTreeNode { IsBranch: false } node] ? node : null;
+            if (folder == null && selected is { Count: > 0 })
+                return menu;
+
+            return TreeExpansionMenu.AppendExpandAllChildren(menu, () => ExpandAllChildren(folder));
         }
 
         protected override void OnSizeChanged(SizeChangedEventArgs e)
@@ -497,19 +530,29 @@ namespace SourceGit.Views
             RaiseEvent(new RoutedEventArgs(SelectionChangedEvent));
         }
 
-        private void OnTreeContextRequested(object _1, ContextRequestedEventArgs _2)
+        private void OnTreeContextRequested(object _, ContextRequestedEventArgs e)
         {
             var repo = DataContext as ViewModels.Repository;
             if (repo?.Settings == null)
                 return;
 
+            if (TreeExpansionMenu.IsRequestedOnEmptySpace(this, e))
+            {
+                TreeExpansionMenu.AppendExpandAllChildren(null, () => ExpandAllChildren()).Open(this);
+                e.Handled = true;
+                return;
+            }
+
             var selected = BranchesPresenter.SelectedItems;
             if (selected == null || selected.Count == 0)
+            {
+                CreateTreeContextMenu().Open(this);
                 return;
+            }
 
             if (selected.Count == 1 && selected[0] is ViewModels.BranchTreeNode { Backend: Models.Remote remote })
             {
-                CreateContextMenuForRemote(repo, remote).Open(this);
+                CreateTreeContextMenu(CreateContextMenuForRemote(repo, remote)).Open(this);
                 return;
             }
 
@@ -524,7 +567,7 @@ namespace SourceGit.Views
             {
                 var branch = branches[0];
                 var menu = branch.IsLocal ? CreateContextMenuForLocalBranch(repo, branch) : CreateContextMenuForRemoteBranch(repo, branch);
-                menu.Open(this);
+                CreateTreeContextMenu(menu).Open(this);
             }
             else
             {
@@ -568,8 +611,9 @@ namespace SourceGit.Views
                     menu.Items.Add(deleteMulti);
                 }
 
-                if (menu.Items.Count > 0)
-                    menu.Open(this);
+                var treeMenu = CreateTreeContextMenu(menu);
+                if (treeMenu.Items.Count > 0)
+                    treeMenu.Open(this);
             }
         }
 

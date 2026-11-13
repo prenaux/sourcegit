@@ -7,7 +7,8 @@
              xmlns:vm="using:SourceGit.ViewModels"
              xmlns:c="using:SourceGit.Converters"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
-             x:Class="SourceGit.Views.SubmodulesView">
+             x:Class="SourceGit.Views.SubmodulesView"
+             ContextRequested="OnTreeContextRequested">
   <UserControl.DataTemplates>
     <DataTemplate DataType="vm:SubmoduleCollectionAsTree">
       <ListBox Classes="repo_left_content_list" Padding="0,0,2,0" ItemsSource="{Binding Rows}" SelectionMode="Single" KeyDown="OnKeyDown">

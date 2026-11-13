@@ -99,7 +99,7 @@ namespace SourceGit.ViewModels
             }
         }
 
-        public static List<TagTreeNode> Build(List<Models.Tag> tags, HashSet<string> expanded)
+        public static List<TagTreeNode> Build(List<Models.Tag> tags, Models.TreeExpansionState state)
         {
             var nodes = new List<TagTreeNode>();
             var folders = new Dictionary<string, TagTreeNode>();
@@ -126,13 +126,13 @@ namespace SourceGit.ViewModels
                         }
                         else if (lastFolder == null)
                         {
-                            lastFolder = new TagTreeNode(folder, expanded.Contains(folder), depth);
+                            lastFolder = new TagTreeNode(folder, state.GetIsExpanded(folder, false), depth);
                             folders.Add(folder, lastFolder);
                             InsertFolder(nodes, lastFolder);
                         }
                         else
                         {
-                            var cur = new TagTreeNode(folder, expanded.Contains(folder), depth);
+                            var cur = new TagTreeNode(folder, state.GetIsExpanded(folder, false), depth);
                             folders.Add(folder, cur);
                             InsertFolder(lastFolder.Children, cur);
                             lastFolder = cur;
@@ -277,20 +277,10 @@ namespace SourceGit.ViewModels
             set;
         } = [];
 
-        public static TagCollectionAsTree Build(List<Models.Tag> tags, TagCollectionAsTree old)
+        public static TagCollectionAsTree Build(List<Models.Tag> tags, Models.TreeExpansionState state)
         {
-            var oldExpanded = new HashSet<string>();
-            if (old != null)
-            {
-                foreach (var row in old.Rows)
-                {
-                    if (row.IsFolder && row.IsExpanded)
-                        oldExpanded.Add(row.FullPath);
-                }
-            }
-
-            var collection = new TagCollectionAsTree();
-            collection.Tree = TagTreeNode.Build(tags, oldExpanded);
+            var collection = new TagCollectionAsTree { _expansionState = state };
+            collection.Tree = TagTreeNode.Build(tags, state);
 
             var rows = new List<TagTreeNode>();
             MakeTreeRows(rows, collection.Tree);
@@ -302,6 +292,7 @@ namespace SourceGit.ViewModels
         public void ToggleExpand(TagTreeNode node)
         {
             node.IsExpanded = !node.IsExpanded;
+            _expansionState.SetExpanded(node.FullPath, node.IsExpanded);
 
             var rows = Rows;
             var depth = node.Depth;
@@ -328,6 +319,19 @@ namespace SourceGit.ViewModels
                 }
                 rows.RemoveRange(idx + 1, removeCount);
             }
+        }
+
+        public void ExpandAllChildren(TagTreeNode node)
+        {
+            if (!node.IsFolder)
+                return;
+
+            if (!node.IsExpanded)
+                ToggleExpand(node);
+
+            _expansionState.SetExpanded(node.FullPath, true);
+            foreach (var child in node.Children)
+                ExpandAllChildren(child);
         }
 
         public void ClearSelection()
@@ -369,6 +373,8 @@ namespace SourceGit.ViewModels
                 last = row;
             }
         }
+
+        private Models.TreeExpansionState _expansionState;
 
         private static void MakeTreeRows(List<TagTreeNode> rows, List<TagTreeNode> nodes)
         {

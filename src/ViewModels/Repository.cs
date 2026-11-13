@@ -986,18 +986,7 @@ namespace SourceGit.ViewModels
 
         public void UpdateBranchNodeIsExpanded(BranchTreeNode node)
         {
-            if (_uiStates == null || !string.IsNullOrWhiteSpace(_filter))
-                return;
-
-            if (node.IsExpanded)
-            {
-                if (!_uiStates.ExpandedBranchNodesInSideBar.Contains(node.Path))
-                    _uiStates.ExpandedBranchNodesInSideBar.Add(node.Path);
-            }
-            else
-            {
-                _uiStates.ExpandedBranchNodesInSideBar.Remove(node.Path);
-            }
+            _uiStates?.BranchTreeExpansion.SetExpanded(node.Path, node.IsExpanded);
         }
 
         public void SetTagFilterMode(Models.Tag tag, Models.FilterMode mode)
@@ -1684,13 +1673,11 @@ namespace SourceGit.ViewModels
         private BranchTreeNode.Builder BuildBranchTree(List<Models.Branch> branches, List<Models.Remote> remotes)
         {
             var builder = new BranchTreeNode.Builder(_uiStates.LocalBranchSortMode, _uiStates.RemoteBranchSortMode);
+            builder.SetExpansionState(_uiStates.BranchTreeExpansion);
             if (string.IsNullOrEmpty(_filter))
             {
                 builder.SetExpandedNodes(_uiStates.ExpandedBranchNodesInSideBar);
                 builder.Run(branches, remotes, false);
-
-                foreach (var invalid in builder.InvalidExpandedNodes)
-                    _uiStates.ExpandedBranchNodesInSideBar.Remove(invalid);
             }
             else
             {
@@ -1741,7 +1728,7 @@ namespace SourceGit.ViewModels
 
             if (_uiStates.ShowTagsAsTree)
             {
-                var tree = TagCollectionAsTree.Build(visible, _visibleTags as TagCollectionAsTree);
+                var tree = TagCollectionAsTree.Build(visible, _uiStates.TagTreeExpansion);
                 foreach (var node in tree.Tree)
                     node.UpdateFilterMode(filterMap);
                 return tree;
@@ -1772,7 +1759,7 @@ namespace SourceGit.ViewModels
             }
 
             if (_uiStates.ShowSubmodulesAsTree)
-                return SubmoduleCollectionAsTree.Build(visible, _visibleSubmodules as SubmoduleCollectionAsTree);
+                return SubmoduleCollectionAsTree.Build(visible, _uiStates.SubmoduleTreeExpansion);
             else
                 return new SubmoduleCollectionAsList() { Submodules = visible };
         }

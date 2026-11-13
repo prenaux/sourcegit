@@ -51,7 +51,7 @@ namespace SourceGit.ViewModels
             Counter = 1;
         }
 
-        public static List<SubmoduleTreeNode> Build(IList<Models.Submodule> submodules, HashSet<string> expanded)
+        public static List<SubmoduleTreeNode> Build(IList<Models.Submodule> submodules, Models.TreeExpansionState state)
         {
             var nodes = new List<SubmoduleTreeNode>();
             var folders = new Dictionary<string, SubmoduleTreeNode>();
@@ -78,13 +78,13 @@ namespace SourceGit.ViewModels
                         }
                         else if (lastFolder == null)
                         {
-                            lastFolder = new SubmoduleTreeNode(folder, depth, expanded.Contains(folder));
+                            lastFolder = new SubmoduleTreeNode(folder, depth, state.GetIsExpanded(folder, false));
                             folders.Add(folder, lastFolder);
                             InsertFolder(nodes, lastFolder);
                         }
                         else
                         {
-                            var cur = new SubmoduleTreeNode(folder, depth, expanded.Contains(folder));
+                            var cur = new SubmoduleTreeNode(folder, depth, state.GetIsExpanded(folder, false));
                             folders.Add(folder, cur);
                             InsertFolder(lastFolder.Children, cur);
                             lastFolder = cur;
@@ -133,20 +133,10 @@ namespace SourceGit.ViewModels
             set;
         } = [];
 
-        public static SubmoduleCollectionAsTree Build(List<Models.Submodule> submodules, SubmoduleCollectionAsTree old)
+        public static SubmoduleCollectionAsTree Build(List<Models.Submodule> submodules, Models.TreeExpansionState state)
         {
-            var oldExpanded = new HashSet<string>();
-            if (old != null)
-            {
-                foreach (var row in old.Rows)
-                {
-                    if (row.IsFolder && row.IsExpanded)
-                        oldExpanded.Add(row.FullPath);
-                }
-            }
-
-            var collection = new SubmoduleCollectionAsTree();
-            collection.Tree = SubmoduleTreeNode.Build(submodules, oldExpanded);
+            var collection = new SubmoduleCollectionAsTree { _expansionState = state };
+            collection.Tree = SubmoduleTreeNode.Build(submodules, state);
 
             var rows = new List<SubmoduleTreeNode>();
             MakeTreeRows(rows, collection.Tree);
@@ -158,6 +148,7 @@ namespace SourceGit.ViewModels
         public void ToggleExpand(SubmoduleTreeNode node)
         {
             node.IsExpanded = !node.IsExpanded;
+            _expansionState.SetExpanded(node.FullPath, node.IsExpanded);
 
             var rows = Rows;
             var depth = node.Depth;
@@ -185,6 +176,21 @@ namespace SourceGit.ViewModels
                 rows.RemoveRange(idx + 1, removeCount);
             }
         }
+
+        public void ExpandAllChildren(SubmoduleTreeNode node)
+        {
+            if (!node.IsFolder)
+                return;
+
+            if (!node.IsExpanded)
+                ToggleExpand(node);
+
+            _expansionState.SetExpanded(node.FullPath, true);
+            foreach (var child in node.Children)
+                ExpandAllChildren(child);
+        }
+
+        private Models.TreeExpansionState _expansionState;
 
         private static void MakeTreeRows(List<SubmoduleTreeNode> rows, List<SubmoduleTreeNode> nodes)
         {

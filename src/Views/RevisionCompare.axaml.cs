@@ -197,7 +197,7 @@ namespace SourceGit.Views
                     menu.Items.Add(copyFullPath);
                 }
 
-                menu.Open(view);
+                view.CreateTreeContextMenu(menu)?.Open(view);
             }
 
             e.Handled = true;

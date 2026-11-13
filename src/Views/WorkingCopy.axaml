@@ -126,6 +126,7 @@
         <!-- Unstaged Changes -->
         <v:ChangeCollectionView Grid.Row="1"
                                 x:Name="UnstagedChangesView"
+                                ExpansionState="{Binding Repository.UIStates.UnstagedTreeExpansion}"
                                 IsUnstagedChange="True"
                                 Background="{DynamicResource Brush.Contents}"
                                 ViewMode="{Binding Source={x:Static vm:Preferences.Instance}, Path=UnstagedChangeViewMode}"
@@ -181,6 +182,7 @@
         <!-- Staged Changes -->
         <v:ChangeCollectionView Grid.Row="1"
                                 x:Name="StagedChangesView"
+                                ExpansionState="{Binding Repository.UIStates.StagedTreeExpansion}"
                                 IsUnstagedChange="False"
                                 Background="{DynamicResource Brush.Contents}"
                                 ViewMode="{Binding Source={x:Static vm:Preferences.Instance}, Path=StagedChangeViewMode}"

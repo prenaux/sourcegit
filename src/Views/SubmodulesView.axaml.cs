@@ -127,6 +127,30 @@ namespace SourceGit.Views
             }
         }
 
+        public void ExpandAllChildren(ViewModels.SubmoduleTreeNode folder = null)
+        {
+            if (Content is not ViewModels.SubmoduleCollectionAsTree tree)
+                return;
+
+            if (folder != null)
+                tree.ExpandAllChildren(folder);
+            else
+                foreach (var node in tree.Tree)
+                    tree.ExpandAllChildren(node);
+
+            Rows = tree.Rows.Count;
+            RaiseEvent(new RoutedEventArgs(RowsChangedEvent));
+        }
+
+        private void OnTreeContextRequested(object sender, ContextRequestedEventArgs e)
+        {
+            if (Content is not ViewModels.SubmoduleCollectionAsTree)
+                return;
+
+            TreeExpansionMenu.AppendExpandAllChildren(null, () => ExpandAllChildren()).Open(this);
+            e.Handled = true;
+        }
+
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
             base.OnPropertyChanged(change);
@@ -172,6 +196,13 @@ namespace SourceGit.Views
         {
             if (sender is Control control && DataContext is ViewModels.Repository repo)
             {
+                if (control.DataContext is ViewModels.SubmoduleTreeNode { IsFolder: true } folder)
+                {
+                    TreeExpansionMenu.AppendExpandAllChildren(null, () => ExpandAllChildren(folder)).Open(control);
+                    e.Handled = true;
+                    return;
+                }
+
                 var submodule = control.DataContext switch
                 {
                     ViewModels.SubmoduleTreeNode node => node.Module,

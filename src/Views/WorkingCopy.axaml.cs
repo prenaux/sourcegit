@@ -50,7 +50,7 @@ namespace SourceGit.Views
                     selectedSingleFolder = node.FullPath;
 
                 var menu = CreateContextMenuForUnstagedChanges(vm, selectedSingleFolder, view);
-                menu?.Open(view);
+                view.CreateTreeContextMenu(menu)?.Open(view);
                 e.Handled = true;
             }
         }
@@ -65,7 +65,7 @@ namespace SourceGit.Views
                     selectedSingleFolder = node.FullPath;
 
                 var menu = CreateContextMenuForStagedChanges(vm, selectedSingleFolder, view);
-                menu?.Open(view);
+                view.CreateTreeContextMenu(menu)?.Open(view);
                 e.Handled = true;
             }
         }

@@ -27,11 +27,11 @@ namespace SourceGit.Views
             var paths = view.GetSelectedPaths();
             var container = view.FindDescendantOfType<ChangeCollectionContainer>();
             if (container is { SelectedItems.Count: 1, SelectedItem: ViewModels.ChangeTreeNode { IsFolder: true } node })
-                detailView.CreateChangeContextMenuByFolder(node, changes)?.Open(view);
+                view.CreateTreeContextMenu(detailView.CreateChangeContextMenuByFolder(node, changes))?.Open(view);
             else if (paths.Count > 1 || changes.Count > 1)
-                detailView.CreateMultipleChangesContextMenu(changes, paths)?.Open(view);
+                view.CreateTreeContextMenu(detailView.CreateMultipleChangesContextMenu(changes, paths))?.Open(view);
             else
-                detailView.CreateChangeContextMenu(changes[0])?.Open(view);
+                view.CreateTreeContextMenu(detailView.CreateChangeContextMenu(changes[0]))?.Open(view);
         }
 
         private async void OnChangeCollectionViewKeyDown(object sender, KeyEventArgs e)
