@@ -19,9 +19,31 @@ namespace SourceGit.Commands
         private const string PREFIX_LFS_DEL = "-version https://git-lfs.github.com/spec/";
         private const string PREFIX_LFS_MODIFY = " version https://git-lfs.github.com/spec/";
 
-        public Diff(string repo, Models.DiffOption opt, int unified, bool ignoreWhitespace)
+        private Diff()
         {
             _result.TextDiff = new Models.TextDiff();
+        }
+
+        public static Models.DiffResult ParsePatch(string patch)
+        {
+            var parser = new Diff();
+            var start = 0;
+            for (var i = 0; i < patch.Length; i++)
+            {
+                if (patch[i] != '\n')
+                    continue;
+
+                parser.ParseLine(patch[start..i]);
+                start = i + 1;
+            }
+            if (start < patch.Length)
+                parser.ParseLine(patch[start..]);
+
+            return parser.FinishParsing();
+        }
+
+        public Diff(string repo, Models.DiffOption opt, int unified, bool ignoreWhitespace) : this()
+        {
 
             WorkingDirectory = repo;
             Context = repo;
@@ -69,6 +91,11 @@ namespace SourceGit.Commands
                 // Ignore exceptions.
             }
 
+            return FinishParsing();
+        }
+
+        private Models.DiffResult FinishParsing()
+        {
             if (_result.IsBinary || _result.IsLFS || _result.TextDiff.Lines.Count == 0)
             {
                 _result.TextDiff = null;

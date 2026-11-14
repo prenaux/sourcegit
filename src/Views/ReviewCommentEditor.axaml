@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:m="using:SourceGit.Models"
+             xmlns:vm="using:SourceGit.ViewModels"
+             xmlns:c="using:SourceGit.Converters"
+             x:Class="SourceGit.Views.ReviewCommentEditor"
+             x:DataType="vm:ReviewDiffContext">
+  <Border Background="{DynamicResource Brush.Popup}" BorderBrush="{DynamicResource Brush.Border2}" BorderThickness="1" CornerRadius="4" Padding="10">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Spacing="8">
+        <TextBlock Text="{Binding AnchorLabel}" FontWeight="Bold"/>
+        <TextBlock Text="{Binding AttachmentLabel}" Foreground="{DynamicResource Brush.FG2}"/>
+        <TextBox Text="{Binding Body, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                 AcceptsReturn="True" TextWrapping="Wrap" MinHeight="100" MaxHeight="260"
+                 Watermark="{DynamicResource Text.Reviews.CommentPlaceholder}"/>
+        <ComboBox ItemsSource="{Binding StateChoices}" SelectedItem="{Binding State, Mode=TwoWay}" HorizontalAlignment="Stretch">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="m:ReviewCommentState">
+              <TextBlock Text="{Binding Converter={x:Static c:ReviewConverters.ToStateLabel}}"/>
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <WrapPanel Orientation="Horizontal">
+          <Button Margin="0,0,6,6" Content="{DynamicResource Text.Reviews.Reattach}" Command="{Binding BeginReattach}" IsEnabled="{Binding CanReattach}"/>
+          <Button Margin="0,0,6,6" Content="{DynamicResource Text.Reviews.OpenOriginal}" Command="{Binding OpenOriginal}" IsEnabled="{Binding CanOpenOriginal}"/>
+          <Button Margin="0,0,0,6" Content="{DynamicResource Text.Reviews.CloseComment}" Command="{Binding CloseEditor}"/>
+        </WrapPanel>
+      </StackPanel>
+    </ScrollViewer>
+  </Border>
+</UserControl>

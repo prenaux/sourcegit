@@ -8,7 +8,7 @@ on:
   workflow_call:
 jobs:
   tests:
-    name: Tree state regressions
+    name: Regression tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -21,6 +21,17 @@ jobs:
           dotnet-version: 10.0.x
       - name: Test tree expansion state
         run: dotnet run --project tests/TreeState/TreeState.csproj -p:DisableAOT=true
+      - name: Test review snapshots and comments
+        run: dotnet run --project tests/Reviews/Reviews.csproj -p:DisableAOT=true
+      - name: Check review formatting
+        run: >-
+          dotnet format whitespace src/SourceGit.csproj --no-restore --verify-no-changes --include
+          src/Commands/CaptureReview.cs src/Commands/Diff.cs src/Converters/ReviewConverters.cs
+          src/Models/Review.cs src/Models/ReviewPatch.cs src/Models/ReviewMigration.cs src/Models/ReviewStore.cs src/Models/ReviewExport.cs
+          src/ViewModels/Reviews.cs src/ViewModels/ReviewDiffContext.cs src/ViewModels/TextDiffContext.cs
+          src/Views/Reviews.axaml.cs src/Views/ReviewCommentEditor.axaml.cs src/Views/TextDiffView.axaml.cs src/Views/Histories.axaml.cs
+      - name: Check review regression formatting
+        run: dotnet format whitespace tests/Reviews/Reviews.csproj --no-restore --verify-no-changes --include tests/Reviews/Program.cs
       - name: Check tree state formatting
         run: >-
           dotnet format whitespace src/SourceGit.csproj --no-restore --verify-no-changes --include

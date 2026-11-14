@@ -100,7 +100,8 @@
     </ContentControl>
 
     <StackPanel x:Name="Popup" IsVisible="False" Orientation="Horizontal" VerticalAlignment="Top" HorizontalAlignment="Right" Effect="drop-shadow(0 0 8 #80000000)">
-      <Button Classes="flat" BorderBrush="{DynamicResource Brush.FlatButton.FloatingBorder}" Click="OnStageChunk" HotKey="{OnPlatform Ctrl+S, macOS=⌘+S}" IsVisible="{Binding Option.IsUnstaged}">
+      <Button Classes="flat" BorderBrush="{DynamicResource Brush.FlatButton.FloatingBorder}" Click="OnAddReviewComment" Content="{Binding Review.CommentActionLabel}" IsVisible="{Binding IsReview}"/>
+      <Button Classes="flat" BorderBrush="{DynamicResource Brush.FlatButton.FloatingBorder}" Click="OnStageChunk" HotKey="{OnPlatform Ctrl+S, macOS=⌘+S}" IsVisible="{Binding CanStageChunks}" IsEnabled="{Binding CanStageChunks}">
         <TextBlock>
           <Run Text="{DynamicResource Text.Hunk.Stage}"/>
           <Run Text=" "/>
@@ -111,7 +112,7 @@
         </TextBlock>
       </Button>
 
-      <Button Classes="flat" BorderBrush="{DynamicResource Brush.FlatButton.FloatingBorder}" Click="OnUnstageChunk" HotKey="{OnPlatform Ctrl+U, macOS=⌘+U}" IsVisible="{Binding Option.IsUnstaged, Converter={x:Static BoolConverters.Not}}">
+      <Button Classes="flat" BorderBrush="{DynamicResource Brush.FlatButton.FloatingBorder}" Click="OnUnstageChunk" HotKey="{OnPlatform Ctrl+U, macOS=⌘+U}" IsVisible="{Binding CanUnstageChunks}" IsEnabled="{Binding CanUnstageChunks}">
         <TextBlock>
           <Run Text="{DynamicResource Text.Hunk.Unstage}"/>
           <Run Text=" "/>
@@ -122,7 +123,7 @@
         </TextBlock>
       </Button>
 
-      <Button Classes="flat" BorderBrush="{DynamicResource Brush.FlatButton.FloatingBorder}" Margin="8,0,0,0" HotKey="{OnPlatform Ctrl+D, macOS=⌘+D}" Click="OnDiscardChunk" IsVisible="{Binding Option.IsUnstaged}">
+      <Button Classes="flat" BorderBrush="{DynamicResource Brush.FlatButton.FloatingBorder}" Margin="8,0,0,0" HotKey="{OnPlatform Ctrl+D, macOS=⌘+D}" Click="OnDiscardChunk" IsVisible="{Binding CanStageChunks}" IsEnabled="{Binding CanStageChunks}">
         <TextBlock>
           <Run Text="{DynamicResource Text.Hunk.Discard}"/>
           <Run Text=" "/>
@@ -133,5 +134,9 @@
         </TextBlock>
       </Button>
     </StackPanel>
+    <Border x:Name="ReviewEditor" Width="360" HorizontalAlignment="Right" VerticalAlignment="Top"
+            IsVisible="{Binding Review.IsEditing}" Effect="drop-shadow(0 0 8 #80000000)">
+      <v:ReviewCommentEditor DataContext="{Binding Review}"/>
+    </Border>
   </Grid>
 </UserControl>

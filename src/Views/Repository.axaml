@@ -181,6 +181,12 @@
                   </Button>
                 </Grid>
               </ListBoxItem>
+              <ListBoxItem BorderThickness="0,1,0,0">
+                <Grid Classes="view_mode" ColumnDefinitions="Auto,*">
+                  <Path Grid.Column="0" Classes="icon" Data="{StaticResource Icons.File}"/>
+                  <TextBlock Grid.Column="1" Classes="header" Text="{DynamicResource Text.Reviews}"/>
+                </Grid>
+              </ListBoxItem>
             </ListBox>
           </Border>
         </Border>
@@ -935,6 +941,9 @@
 
           <DataTemplate DataType="vm:StashesPage">
             <v:StashesPage/>
+          </DataTemplate>
+          <DataTemplate DataType="vm:Reviews">
+            <v:Reviews/>
           </DataTemplate>
         </ContentControl.DataTemplates>
       </ContentControl>

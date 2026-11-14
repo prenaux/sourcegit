@@ -67,6 +67,7 @@ namespace SourceGit.ViewModels
                     {
                         1 => _workingCopy,
                         2 => _stashesPage,
+                        3 => _reviews,
                         _ => _histories,
                     };
                 }
@@ -463,6 +464,7 @@ namespace SourceGit.ViewModels
             _histories = new Histories(this);
             _workingCopy = new WorkingCopy(this) { CommitMessage = _uiStates.LastCommitMessage };
             _stashesPage = new StashesPage(this);
+            _reviews = new Reviews(this);
             _searchCommitContext = new SearchCommitContext(this);
 
             if (Preferences.Instance.ShowLocalChangesByDefault)
@@ -510,12 +512,14 @@ namespace SourceGit.ViewModels
             _histories.Dispose();
             _workingCopy.Dispose();
             _stashesPage.Dispose();
+            _reviews.Dispose();
             _searchCommitContext.Dispose();
 
             _watcher = null;
             _histories = null;
             _workingCopy = null;
             _stashesPage = null;
+            _reviews = null;
 
             _localChangesCount = 0;
             _stashesCount = 0;
@@ -528,6 +532,12 @@ namespace SourceGit.ViewModels
             _visibleTags = null;
             _submodules.Clear();
             _visibleSubmodules = null;
+        }
+
+        public async Task StartReviewAsync(Models.ReviewSourceKind source, string baseRevision = "", string targetRevision = "")
+        {
+            await _reviews.OpenSourceAsync(source, baseRevision, targetRevision);
+            SelectedViewIndex = 3;
         }
 
         public bool CanCreatePopup()
@@ -1930,6 +1940,7 @@ namespace SourceGit.ViewModels
         private Histories _histories = null;
         private WorkingCopy _workingCopy = null;
         private StashesPage _stashesPage = null;
+        private Reviews _reviews = null;
         private int _selectedViewIndex = 0;
         private object _selectedView = null;
 

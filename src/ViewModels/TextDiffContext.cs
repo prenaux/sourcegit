@@ -28,6 +28,10 @@ namespace SourceGit.ViewModels
     {
         public Models.DiffOption Option => _option;
         public Models.TextDiff Data => _data;
+        public ReviewDiffContext Review { get; set; }
+        public bool IsReview => Review != null;
+        public bool CanStageChunks => !IsReview && _option?.WorkingCopyChange != null && _option.IsUnstaged;
+        public bool CanUnstageChunks => !IsReview && _option?.WorkingCopyChange != null && !_option.IsUnstaged;
 
         public Vector ScrollOffset
         {
@@ -130,6 +134,7 @@ namespace SourceGit.ViewModels
 
         protected void TryKeepPrevState(TextDiffContext prev, List<Models.TextDiffLine> lines)
         {
+            Review = prev?.Review;
             var fastTest = prev != null &&
                 prev._option.IsUnstaged == _option.IsUnstaged &&
                 prev._option.Path.Equals(_option.Path, StringComparison.Ordinal) &&

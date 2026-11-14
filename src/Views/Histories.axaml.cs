@@ -328,11 +328,14 @@ namespace SourceGit.Views
                 if (selected.Count > 1)
                 {
                     var menu = CreateContextMenuForMultipleCommits(repo, commits);
+                    if (commits.Count == 2)
+                        AppendReviewAction(menu, repo, Models.ReviewSourceKind.Comparison, commits[0].SHA, commits[1].SHA);
                     menu.Open(CommitListContainer);
                 }
                 else if (selected.Count == 1)
                 {
                     var menu = CreateContextMenuForSingleCommit(repo, commits[0]);
+                    AppendReviewAction(menu, repo, Models.ReviewSourceKind.Commit, string.Empty, commits[0].SHA);
                     menu.Open(CommitListContainer);
                 }
             }
@@ -461,6 +464,18 @@ namespace SourceGit.Views
                 if (e.Source is Control { DataContext: Models.Commit c })
                     await histories.CheckoutBranchByCommitAsync(c);
             }
+        }
+
+        private static void AppendReviewAction(ContextMenu menu, ViewModels.Repository repository, Models.ReviewSourceKind source, string baseRevision, string targetRevision)
+        {
+            menu.Items.Add(new MenuItem { Header = "-" });
+            var item = new MenuItem { Header = App.Text("Reviews.ReviewChanges"), Icon = App.CreateMenuIcon("Icons.Compare") };
+            item.Click += async (_, e) =>
+            {
+                await repository.StartReviewAsync(source, baseRevision, targetRevision);
+                e.Handled = true;
+            };
+            menu.Items.Add(item);
         }
 
         private ContextMenu CreateContextMenuForMultipleCommits(ViewModels.Repository repo, List<Models.Commit> selected)

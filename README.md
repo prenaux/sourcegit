@@ -60,6 +60,7 @@
 * Create PR on GitHub/Gitlab/Gitea/Gitee/Bitbucket...
 * Using AI to generate commit message
 * Built-in conventional commit message helper.
+* [Local reviews](REVIEWS.md) with captured diffs, inline comments, and snapshot history.
 
 > [!WARNING]
 > **Linux** only tested on **Debian 12** on both **X11** & **Wayland**.
