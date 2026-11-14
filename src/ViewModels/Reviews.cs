@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,14 +25,12 @@ namespace SourceGit.ViewModels
         private Models.Review _review;
         private Models.Review _selectedReview;
         private Models.ReviewSnapshot _snapshot;
+        private Models.ReviewSnapshot _sourceSnapshot;
         private ReviewFileItem _selectedFile;
         private ReviewCommentItem _selectedComment;
         private ReviewDiffContext _context;
         private TextDiffContext _diff;
         private Models.ReviewComment _reattach;
-        private Models.ReviewSourceKind _source = Models.ReviewSourceKind.Staged;
-        private string _baseRevision = "HEAD~1";
-        private string _targetRevision = "HEAD";
         private string _fileFilter = string.Empty;
         private string _status = string.Empty;
         private string _saveStatus = string.Empty;
@@ -46,28 +45,32 @@ namespace SourceGit.ViewModels
         private CancellationTokenSource _fileLoadCancellation;
         private bool _isLoadingFile;
         private bool _isGeneralExpanded;
+        private string _generalReviewMessage = string.Empty;
+        private string _fileViewNotice = string.Empty;
+        private ReviewFileFilter _reviewFilter;
+        public Task ReviewLoadTask { get; private set; } = Task.CompletedTask;
         public Task FileLoadTask { get; private set; } = Task.CompletedTask;
 
         public AvaloniaList<Models.Review> SavedReviews { get; } = [];
         public AvaloniaList<Models.ReviewSnapshot> Snapshots { get; } = [];
         public AvaloniaList<ReviewFileItem> Files { get; } = [];
         public AvaloniaList<ReviewCommentItem> Comments { get; } = [];
-        public Models.ReviewSourceKind[] SourceChoices { get; } = Enum.GetValues<Models.ReviewSourceKind>();
+        public ReviewFileFilter[] ReviewFilterChoices { get; } = Enum.GetValues<ReviewFileFilter>();
         public Models.ReviewCommentState[] StateChoices { get; } = Enum.GetValues<Models.ReviewCommentState>();
         public Models.Review CurrentReview => _review;
         public Models.ReviewSnapshot CurrentSnapshot => _snapshot;
         public bool HasPendingReattach => _reattach != null;
         public bool HasReview => _review != null;
         public bool HasFile => _selectedFile != null;
-        public bool CanMarkFileReviewed => _selectedFile != null && _selectedFile.Data.IsLoaded && !_selectedFile.Data.IsOutsideDiff;
         public bool IsLoadingFile { get => _isLoadingFile; private set => SetProperty(ref _isLoadingFile, value); }
         public bool IsGeneralExpanded { get => _isGeneralExpanded; set => SetProperty(ref _isGeneralExpanded, value); }
         public bool HasTextDiff => _diff != null;
         public bool IsPreview => _review != null && !SavedReviews.Contains(_review);
         public bool CanUndo => _undo.Count > 0;
-        public bool IsRevisionSource => _source is Models.ReviewSourceKind.Commit or Models.ReviewSourceKind.Comparison;
-        public bool IsComparison => _source == Models.ReviewSourceKind.Comparison;
-        public string ComparisonLabel => _snapshot == null ? string.Empty : $"{_snapshot.BaseRevision} -> {_snapshot.TargetRevision}";
+        public string ComparisonLabel => _snapshot == null ? string.Empty : _snapshot.Source is Models.ReviewSourceKind.Commit or Models.ReviewSourceKind.Comparison ?
+            $"{_snapshot.BaseRevision} -> {_snapshot.TargetRevision}" : App.Text("Reviews.Source." + _snapshot.Source);
+        public string SelectedFileFullPath => _selectedFile == null ? string.Empty : GetFullPath(_selectedFile.Path);
+        public string FileViewNotice { get => _fileViewNotice; private set => SetProperty(ref _fileViewNotice, value); }
 
         public Models.Review SelectedReview
         {
@@ -75,7 +78,7 @@ namespace SourceGit.ViewModels
             set
             {
                 if (SetProperty(ref _selectedReview, value) && !_isSelecting && value != null)
-                    _ = RunBusyAsync(() => OpenReviewAsync(value));
+                    ReviewLoadTask = RunBusyAsync(() => OpenReviewAsync(value));
             }
         }
 
@@ -86,7 +89,7 @@ namespace SourceGit.ViewModels
             {
                 if (value == null || _isSelecting || ReferenceEquals(value, _snapshot))
                     return;
-                _ = RunBusyAsync(() => OpenSnapshotAsync(value));
+                ReviewLoadTask = RunBusyAsync(() => OpenSnapshotAsync(value));
             }
         }
 
@@ -97,7 +100,7 @@ namespace SourceGit.ViewModels
             {
                 if (_isSelecting && value == null)
                     return;
-                var previous = _selectedFile?.Data;
+                var previous = _selectedFile;
                 if (SetProperty(ref _selectedFile, value) && !_isSelecting)
                 {
                     _fileLoadCancellation?.Cancel();
@@ -129,22 +132,6 @@ namespace SourceGit.ViewModels
             private set => SetProperty(ref _diff, value);
         }
 
-        public Models.ReviewSourceKind Source
-        {
-            get => _source;
-            set
-            {
-                if (!SetProperty(ref _source, value))
-                    return;
-                OnPropertyChanged(nameof(IsRevisionSource));
-                OnPropertyChanged(nameof(IsComparison));
-                if (!_isSelecting && !IsRevisionSource && _initialized)
-                    _ = PreviewAsync();
-            }
-        }
-
-        public string BaseRevision { get => _baseRevision; set => SetProperty(ref _baseRevision, value); }
-        public string TargetRevision { get => _targetRevision; set => SetProperty(ref _targetRevision, value); }
         public bool IsBusy { get => _isBusy; private set => SetProperty(ref _isBusy, value); }
         public bool SourceChanged { get => _sourceChanged; private set => SetProperty(ref _sourceChanged, value); }
         public string Status { get => _status; private set => SetProperty(ref _status, value); }
@@ -160,6 +147,7 @@ namespace SourceGit.ViewModels
                     return;
                 _review.Title = value ?? string.Empty;
                 _review.HasGeneralEdits = true;
+                _generalReviewMessage = _review.Title + "\n\n" + _review.GeneralText;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(GeneralReviewMessage));
                 QueueSave();
@@ -175,6 +163,7 @@ namespace SourceGit.ViewModels
                     return;
                 _review.GeneralText = value ?? string.Empty;
                 _review.HasGeneralEdits = true;
+                _generalReviewMessage = _review.Title + "\n\n" + _review.GeneralText;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(GeneralReviewMessage));
                 QueueSave();
@@ -183,12 +172,13 @@ namespace SourceGit.ViewModels
 
         public string GeneralReviewMessage
         {
-            get => _review == null ? string.Empty : _review.Title + "\n\n" + _review.GeneralText;
+            get => _generalReviewMessage;
             set
             {
                 if (_review == null || GeneralReviewMessage == value)
                     return;
-                var message = (value ?? string.Empty).Replace("\r\n", "\n", StringComparison.Ordinal);
+                _generalReviewMessage = value ?? string.Empty;
+                var message = _generalReviewMessage.Replace("\r\n", "\n", StringComparison.Ordinal);
                 var separator = message.IndexOf('\n');
                 _review.Title = separator < 0 ? message : message[..separator];
                 _review.GeneralText = separator < 0 ? string.Empty : message[(separator + 1)..].TrimStart('\n');
@@ -210,15 +200,13 @@ namespace SourceGit.ViewModels
             }
         }
 
-        public bool IsFileReviewed
+        public ReviewFileFilter ReviewFilter
         {
-            get => _selectedFile?.Data.Progress == Models.ReviewFileProgress.Reviewed;
+            get => _reviewFilter;
             set
             {
-                if (!CanMarkFileReviewed || IsFileReviewed == value)
-                    return;
-                _selectedFile.Data.Progress = value ? Models.ReviewFileProgress.Reviewed : Models.ReviewFileProgress.Unreviewed;
-                NotifyFileChanged(_selectedFile.Data);
+                if (SetProperty(ref _reviewFilter, value))
+                    FilterFiles();
             }
         }
 
@@ -237,11 +225,6 @@ namespace SourceGit.ViewModels
 
         public Reviews(Repository repository) : this(repository.FullPath)
         {
-            if (repository.IsBare)
-            {
-                SourceChoices = [Models.ReviewSourceKind.Commit, Models.ReviewSourceKind.Comparison];
-                _source = Models.ReviewSourceKind.Commit;
-            }
         }
 
         public Reviews(string repository)
@@ -264,8 +247,6 @@ namespace SourceGit.ViewModels
                 if (_store.LoadErrors.Count > 0)
                     Status = string.Join("\n", _store.LoadErrors);
             });
-            if (_review == null && !IsRevisionSource)
-                await PreviewAsync();
         }
 
         private async Task LoadSavedReviewsAsync()
@@ -276,25 +257,12 @@ namespace SourceGit.ViewModels
             _initialized = true;
         }
 
-        public async Task OpenSourceAsync(Models.ReviewSourceKind source, string baseRevision, string targetRevision)
-        {
-            await RunBusyAsync(async () =>
-            {
-                await LoadSavedReviewsAsync();
-                _isSelecting = true;
-                Source = source;
-                BaseRevision = baseRevision;
-                TargetRevision = targetRevision;
-                _isSelecting = false;
-            });
-            await PreviewAsync();
-        }
-
-        public Task PreviewAsync()
+        public Task OpenSourceAsync(Models.ReviewSourceKind source, string baseRevision, string targetRevision)
         {
             return RunBusyAsync(async () =>
             {
-                var snapshot = await Task.Run(() => new Commands.CaptureReview(_repository).CaptureAsync(Source, BaseRevision, TargetRevision));
+                await LoadSavedReviewsAsync();
+                var snapshot = await Task.Run(() => new Commands.CaptureReview(_repository).CaptureAsync(source, baseRevision, targetRevision));
                 if (_disposed)
                     return;
                 foreach (var saved in SavedReviews)
@@ -302,15 +270,7 @@ namespace SourceGit.ViewModels
                     var match = saved.Snapshots.Find(x => CanReuseSnapshot(x, snapshot));
                     if (match == null)
                         continue;
-                    await Task.Run(() => _store.LoadSnapshot(saved, match));
-                    match.Files.RemoveAll(x => !x.HasReviewWork);
-                    foreach (var file in snapshot.Files)
-                        if (!match.Files.Exists(x => x.Path == file.Path))
-                            match.Files.Add(file);
-                    match.Files.Sort((a, b) => StringComparer.Ordinal.Compare(a.Path, b.Path));
-                    match.Subject = snapshot.Subject;
-                    _review = saved;
-                    SetSnapshot(match);
+                    await LoadSnapshotViewAsync(saved, match, snapshot);
                     return;
                 }
                 OpenPreview(snapshot);
@@ -332,6 +292,7 @@ namespace SourceGit.ViewModels
 
         public void OpenPreview(Models.ReviewSnapshot snapshot)
         {
+            _sourceSnapshot = snapshot;
             _review = new Models.Review
             {
                 Title = snapshot.Subject.Length > 0 ? snapshot.Subject : App.Text("Reviews.DefaultTitle", App.Text("Reviews.Source." + snapshot.Source), DateTime.Now.ToString("yyyy-MM-dd HH:mm")),
@@ -366,6 +327,7 @@ namespace SourceGit.ViewModels
                         await capture.LoadFileAsync(next, file);
                 Models.ReviewMigration.MigrateComments(previous, next, hash => next.Contents.TryGetValue(hash, out var text) ? text : ReadContent(hash));
                 _review.Snapshots.Add(next);
+                _sourceSnapshot = next;
                 SetSnapshot(next);
                 var attached = 0;
                 var attention = 0;
@@ -394,8 +356,10 @@ namespace SourceGit.ViewModels
             _isCheckingSource = true;
             try
             {
-                var files = snapshot.Files.FindAll(x => !x.IsOutsideDiff && (x.HasReviewWork || ReferenceEquals(x, _selectedFile?.Data)));
-                var changed = await new Commands.CaptureReview(_repository).HaveFilesChangedAsync(snapshot, files);
+                var files = _allFiles.Where(x => !x.IsRecordedContext && (x.Data.HasReviewWork || ReferenceEquals(x, _selectedFile)))
+                    .Select(x => x.SourceFile).ToList();
+                var changed = _allFiles.Exists(x => x.IsRecordedContext && x.SourceFile != null && x.Data.HasReviewWork) ||
+                    await new Commands.CaptureReview(_repository).HaveFilesChangedAsync(_sourceSnapshot ?? snapshot, files);
                 if (ReferenceEquals(snapshot, _snapshot))
                     SourceChanged = changed;
             }
@@ -416,18 +380,36 @@ namespace SourceGit.ViewModels
                 (review.Snapshots.Count > 0 ? review.Snapshots[^1] : null);
             if (snapshot == null)
                 return;
+            await LoadSnapshotViewAsync(review, snapshot);
+        }
+
+        private Task OpenSnapshotAsync(Models.ReviewSnapshot snapshot) => LoadSnapshotViewAsync(_review, snapshot);
+
+        private async Task LoadSnapshotViewAsync(Models.Review review, Models.ReviewSnapshot snapshot, Models.ReviewSnapshot source = null)
+        {
+            _fileLoadCancellation?.Cancel();
             await Task.Run(() => _store.LoadSnapshot(review, snapshot));
+            var sourceError = string.Empty;
+            if (source == null)
+            {
+                try
+                {
+                    source = await Task.Run(() => new Commands.CaptureReview(_repository).CaptureAsync(snapshot.Source, snapshot.BaseRevision, snapshot.TargetRevision));
+                }
+                catch (Exception exception)
+                {
+                    sourceError = App.Text("Reviews.SourceUnavailable", exception.Message);
+                }
+            }
             if (_disposed)
                 return;
             _review = review;
+            _sourceSnapshot = source;
+            if (source != null)
+                snapshot.Subject = source.Subject;
             SetSnapshot(snapshot);
-        }
-
-        private async Task OpenSnapshotAsync(Models.ReviewSnapshot snapshot)
-        {
-            await Task.Run(() => _store.LoadSnapshot(_review, snapshot));
-            if (!_disposed)
-                SetSnapshot(snapshot);
+            if (sourceError.Length > 0)
+                Status = sourceError;
         }
 
         private void SetSnapshot(Models.ReviewSnapshot snapshot)
@@ -437,14 +419,21 @@ namespace SourceGit.ViewModels
             {
                 _snapshot = snapshot;
                 _selectedReview = SavedReviews.Contains(_review) ? _review : null;
-                _source = snapshot.Source;
-                _baseRevision = snapshot.BaseRevision;
-                _targetRevision = snapshot.TargetRevision;
                 Snapshots.Clear();
                 Snapshots.AddRange(_review.Snapshots);
                 _allFiles.Clear();
+                var recorded = snapshot.Files.ToDictionary(x => x.Path, StringComparer.Ordinal);
+                var paths = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var source in _sourceSnapshot?.Files ?? [])
+                {
+                    var file = recorded.TryGetValue(source.Path, out var existing) ? existing : source;
+                    _allFiles.Add(new ReviewFileItem(file, source));
+                    paths.Add(source.Path);
+                }
                 foreach (var file in snapshot.Files)
-                    _allFiles.Add(new ReviewFileItem(file));
+                    if (file.HasReviewWork && paths.Add(file.Path))
+                        _allFiles.Add(new ReviewFileItem(file, null));
+                _allFiles.Sort((a, b) => StringComparer.Ordinal.Compare(a.Path, b.Path));
                 _selectedFile = null;
                 _selectedComment = null;
                 _reattach = null;
@@ -454,17 +443,13 @@ namespace SourceGit.ViewModels
             {
                 _isSelecting = false;
             }
+            _generalReviewMessage = _review.Title + "\n\n" + _review.GeneralText;
             SourceChanged = false;
             SaveStatus = string.Empty;
             Status = IsPreview ? App.Text("Reviews.PreviewHint") : string.Empty;
             FilterFiles();
             OnPropertyChanged(nameof(SelectedReview));
             OnPropertyChanged(nameof(SelectedSnapshot));
-            OnPropertyChanged(nameof(Source));
-            OnPropertyChanged(nameof(BaseRevision));
-            OnPropertyChanged(nameof(TargetRevision));
-            OnPropertyChanged(nameof(IsRevisionSource));
-            OnPropertyChanged(nameof(IsComparison));
             OnPropertyChanged(nameof(ComparisonLabel));
             OnPropertyChanged(nameof(Title));
             OnPropertyChanged(nameof(GeneralText));
@@ -479,7 +464,7 @@ namespace SourceGit.ViewModels
             var selected = _selectedFile;
             _isSelecting = true;
             Files.Clear();
-            Files.AddRange(_allFiles.Where(file => string.IsNullOrEmpty(_fileFilter) || file.Path.Contains(_fileFilter, StringComparison.OrdinalIgnoreCase)));
+            Files.AddRange(_allFiles.Where(MatchesFileFilter));
             _isSelecting = false;
             _selectedFile = null;
             SelectedFile = selected != null && Files.Contains(selected) ? selected : Files.Count > 0 ? Files[0] : null;
@@ -487,13 +472,28 @@ namespace SourceGit.ViewModels
                 BuildFileView();
         }
 
-        private void ReleasePreview(Models.ReviewFile file)
+        private bool MatchesFileFilter(ReviewFileItem file)
         {
-            if (file == null || file.HasReviewWork || file.SourceIdentity.Length == 0)
+            return (string.IsNullOrEmpty(_fileFilter) || file.Path.Contains(_fileFilter, StringComparison.OrdinalIgnoreCase)) &&
+                (_reviewFilter == ReviewFileFilter.All || (_reviewFilter == ReviewFileFilter.Reviewed) == file.Data.HasReviewWork);
+        }
+
+        public void RefreshFileFilter()
+        {
+            if (_isSelecting || _disposed || _reviewFilter == ReviewFileFilter.All)
+                return;
+            if (!Files.SequenceEqual(_allFiles.Where(MatchesFileFilter)))
+                FilterFiles();
+        }
+
+        private void ReleasePreview(ReviewFileItem item)
+        {
+            var file = item?.SourceFile;
+            if (file == null || item.Data.HasReviewWork || file.SourceIdentity.Length == 0)
                 return;
             foreach (var hash in new[] { file.OldContent, file.NewContent })
-                if (!_snapshot.Files.Exists(x => x.HasReviewWork && (x.OldContent == hash || x.NewContent == hash)))
-                    _snapshot.Contents.TryRemove(hash, out _);
+                if (!_allFiles.Exists(x => x.Data.HasReviewWork && (x.Data.OldContent == hash || x.Data.NewContent == hash)))
+                    _sourceSnapshot?.Contents.TryRemove(hash, out _);
             file.Patch = string.Empty;
             file.IsLoaded = false;
         }
@@ -502,50 +502,83 @@ namespace SourceGit.ViewModels
         {
             _fileLoadCancellation?.Cancel();
             _selectedComment = null;
-            var file = _selectedFile?.Data;
-            Context = file?.IsLoaded == true ? new ReviewDiffContext(this, file) : null;
+            SelectDisplayContext(_selectedFile);
             RebuildDiff();
             RefreshComments();
             OnPropertyChanged(nameof(HasFile));
-            OnPropertyChanged(nameof(CanMarkFileReviewed));
-            OnPropertyChanged(nameof(IsFileReviewed));
-            IsLoadingFile = file != null && !file.IsLoaded;
+            OnPropertyChanged(nameof(SelectedFileFullPath));
+            IsLoadingFile = _selectedFile?.SourceFile?.IsLoaded == false;
             if (IsLoadingFile)
             {
                 _fileLoadCancellation = new CancellationTokenSource();
-                FileLoadTask = LoadSelectedFileAsync(_snapshot, file, _fileLoadCancellation.Token);
+                FileLoadTask = LoadSelectedFileAsync(_sourceSnapshot, _selectedFile, _fileLoadCancellation.Token);
             }
         }
 
-        private async Task LoadSelectedFileAsync(Models.ReviewSnapshot snapshot, Models.ReviewFile file, CancellationToken cancellationToken)
+        private static bool HasMatchingRecordedCode(Models.ReviewFile recorded, Models.ReviewFile source)
+        {
+            if (recorded.IsBinary != source.IsBinary)
+                return false;
+            if (recorded.OldContent.Length > 0 || recorded.NewContent.Length > 0)
+                return recorded.OldContent == source.OldContent && recorded.NewContent == source.NewContent;
+            return recorded.SourceIdentity == source.SourceIdentity;
+        }
+
+        private void SelectDisplayContext(ReviewFileItem item)
+        {
+            Context = null;
+            FileViewNotice = string.Empty;
+            if (item == null)
+                return;
+            item.IsRecordedContext = item.SourceFile == null ||
+                (item.SourceFile.IsLoaded && item.Data.HasReviewWork && !HasMatchingRecordedCode(item.Data, item.SourceFile));
+            var display = item.DisplayFile;
+            if (item.IsRecordedContext)
+                FileViewNotice = App.Text("Reviews.RecordedContextOnly");
+            if (display?.IsLoaded == true)
+                Context = new ReviewDiffContext(this, item.Data, display);
+        }
+
+        private async Task LoadSelectedFileAsync(Models.ReviewSnapshot snapshot, ReviewFileItem item, CancellationToken cancellationToken)
         {
             try
             {
-                await Task.Run(() => new Commands.CaptureReview(_repository).LoadFileAsync(snapshot, file, cancellationToken), cancellationToken);
-                if (_disposed || cancellationToken.IsCancellationRequested || !ReferenceEquals(file, _selectedFile?.Data))
+                await Task.Run(() => new Commands.CaptureReview(_repository).LoadFileAsync(snapshot, item.SourceFile, cancellationToken), cancellationToken);
+                if (_disposed || cancellationToken.IsCancellationRequested || !ReferenceEquals(item, _selectedFile))
                     return;
-                Context = new ReviewDiffContext(this, file);
+                SelectDisplayContext(item);
                 RebuildDiff();
-                OnPropertyChanged(nameof(CanMarkFileReviewed));
+                if (_selectedComment != null)
+                    Context?.EditComment(_selectedComment.Data);
             }
             catch (OperationCanceledException)
             {
             }
             catch (Exception exception)
             {
-                if (!_disposed && !cancellationToken.IsCancellationRequested)
-                    Status = exception.Message;
+                if (!_disposed && !cancellationToken.IsCancellationRequested && ReferenceEquals(item, _selectedFile))
+                {
+                    if (item.Data.HasReviewWork)
+                    {
+                        item.IsRecordedContext = true;
+                        Context = new ReviewDiffContext(this, item.Data, item.Data);
+                        RebuildDiff();
+                        FileViewNotice = App.Text("Reviews.SourceUnavailable", exception.Message);
+                    }
+                    else
+                        Status = exception.Message;
+                }
             }
             finally
             {
-                if (ReferenceEquals(file, _selectedFile?.Data))
+                if (ReferenceEquals(item, _selectedFile))
                     IsLoadingFile = false;
             }
         }
 
         private void RebuildDiff()
         {
-            var file = _selectedFile?.Data;
+            var file = _selectedFile?.DisplayFile;
             var parsed = file == null || !file.IsLoaded || file.IsBinary ? null : Commands.Diff.ParsePatch(file.Patch).TextDiff;
             if (parsed == null)
             {
@@ -563,14 +596,26 @@ namespace SourceGit.ViewModels
 
         public string ReadContent(string hash)
         {
+            if (_sourceSnapshot != null && _sourceSnapshot.Contents.TryGetValue(hash, out var sourceText))
+                return sourceText;
             foreach (var snapshot in _review.Snapshots)
                 if (snapshot.Contents.TryGetValue(hash, out var text))
                     return text;
             return _store.ReadContent(hash);
         }
 
+        public string GetFullPath(string path) => Path.GetFullPath(Path.Combine(_repository, path));
+
         public void AddComment(Models.ReviewFile file, Models.ReviewComment comment)
         {
+            if (ReferenceEquals(_selectedFile?.Data, file) && !_selectedFile.IsRecordedContext)
+            {
+                var source = _selectedFile.SourceFile;
+                file.Patch = source.Patch;
+                file.OldContent = source.OldContent;
+                file.NewContent = source.NewContent;
+                file.SourceIdentity = source.SourceIdentity;
+            }
             file.Comments.Add(comment);
             NotifyFileChanged(file);
         }
@@ -583,13 +628,16 @@ namespace SourceGit.ViewModels
 
         public void NotifyFileChanged(Models.ReviewFile file)
         {
+            if (!_snapshot.Files.Contains(file))
+                _snapshot.Files.Add(file);
             file.MarkChanged();
             foreach (var item in _allFiles)
                 if (ReferenceEquals(item.Data, file))
                     item.Refresh();
             RefreshComments();
-            OnPropertyChanged(nameof(IsFileReviewed));
             QueueSave();
+            if (_context?.IsEditing != true)
+                RefreshFileFilter();
         }
 
         private void RefreshComments()
@@ -733,7 +781,7 @@ namespace SourceGit.ViewModels
                 return;
             _review.MarkChanged();
             if (IsPreview && !_review.HasGeneralEdits && string.IsNullOrWhiteSpace(_review.GeneralText) &&
-                !_review.Snapshots.Exists(x => x.Files.Exists(f => f.Comments.Count > 0 || f.Progress != Models.ReviewFileProgress.Unreviewed)))
+                !_review.Snapshots.Exists(x => x.Files.Exists(f => f.HasReviewWork)))
                 return;
             if (!SavedReviews.Contains(_review))
             {

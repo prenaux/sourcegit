@@ -10,6 +10,8 @@ using System.Xml.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.LogicalTree;
+using Avalonia.VisualTree;
 
 using SourceGit.Commands;
 using SourceGit.Models;
@@ -20,6 +22,7 @@ namespace SourceGit.ReviewTests
     internal static class Program
     {
         private static string s_root;
+        private static Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime s_lifetime;
 
         [STAThread]
         private static int Main()
@@ -27,7 +30,8 @@ namespace SourceGit.ReviewTests
             s_root = Path.GetFullPath(Path.Combine("_tmp", "review_tests", Guid.NewGuid().ToString("N")));
             Directory.CreateDirectory(s_root);
             Directory.SetCurrentDirectory(s_root);
-            AppBuilder.Configure<Application>().UseHeadless(new AvaloniaHeadlessPlatformOptions()).SetupWithoutStarting();
+            s_lifetime = new Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            AppBuilder.Configure<Application>().UseHeadless(new AvaloniaHeadlessPlatformOptions()).SetupWithLifetime(s_lifetime);
             SourceGit.Native.OS.GitExecutable = "git";
 
             var tests = new (string Name, Action Run)[]
@@ -40,14 +44,14 @@ namespace SourceGit.ReviewTests
                 (nameof(FlagChangedRangesWithoutResolvingThem), FlagChangedRangesWithoutResolvingThem),
                 (nameof(RefuseAmbiguousRangeMigration), RefuseAmbiguousRangeMigration),
                 (nameof(KeepCommentsOutsideTheCurrentDiff), KeepCommentsOutsideTheCurrentDiff),
-                (nameof(PreserveStatesAndFileProgressAcrossUpdates), PreserveStatesAndFileProgressAcrossUpdates),
-                (nameof(RequireReviewAfterBinaryIdentityChanges), RequireReviewAfterBinaryIdentityChanges),
+                (nameof(PreserveAllCommentStatesAcrossUpdates), PreserveAllCommentStatesAcrossUpdates),
+                (nameof(PreserveFileCommentsAcrossBinaryIdentityChanges), PreserveFileCommentsAcrossBinaryIdentityChanges),
                 (nameof(MigrateRenamedFiles), MigrateRenamedFiles),
                 (nameof(RoundTripXmlAndCapturedContent), RoundTripXmlAndCapturedContent),
                 (nameof(RejectExternalEntitiesAndStorageLinks), RejectExternalEntitiesAndStorageLinks),
                 (nameof(ExportOnlyActiveCommentsWithHonestAnchors), ExportOnlyActiveCommentsWithHonestAnchors),
                 (nameof(SaveOnlyAfterReviewInteraction), SaveOnlyAfterReviewInteraction),
-                (nameof(KeepFileProgressSeparateFromCommentStates), KeepFileProgressSeparateFromCommentStates),
+                (nameof(KeepReviewedMembershipAcrossCommentStateChanges), KeepReviewedMembershipAcrossCommentStateChanges),
                 (nameof(UndoWholeFileStateChanges), UndoWholeFileStateChanges),
                 (nameof(ReattachWithoutLosingOriginalContext), ReattachWithoutLosingOriginalContext),
                 (nameof(DisableStagingInBothReviewLayouts), DisableStagingInBothReviewLayouts),
@@ -63,13 +67,34 @@ namespace SourceGit.ReviewTests
                 (nameof(RemoveEmptyCommentsOnClose), RemoveEmptyCommentsOnClose),
                 (nameof(ListLargeSourcesWithoutCapturingTheirContents), ListLargeSourcesWithoutCapturingTheirContents),
                 (nameof(KeepLineContextSmallInsideLargeHunks), KeepLineContextSmallInsideLargeHunks),
-                (nameof(ChooseHunkAndLineAnchorsWithToFixDefault), ChooseHunkAndLineAnchorsWithToFixDefault),
+                (nameof(CommentOnSelectedRangesWithToFixDefault), CommentOnSelectedRangesWithToFixDefault),
                 (nameof(SaveGeneralSubjectWithoutCapturingFiles), SaveGeneralSubjectWithoutCapturingFiles),
                 (nameof(MigrateRecordedContextWithoutFullSources), MigrateRecordedContextWithoutFullSources),
                 (nameof(CheckOnlyRelevantFilesAndCancelObsoleteLoads), CheckOnlyRelevantFilesAndCancelObsoleteLoads),
                 (nameof(ConvertLegacyReviewsWithoutLosingNotes), ConvertLegacyReviewsWithoutLosingNotes),
                 (nameof(RefreshUnreviewedPreviewsWithoutChangingRecordedCode), RefreshUnreviewedPreviewsWithoutChangingRecordedCode),
                 (nameof(ReopenSparseReviewsWithTheFullLiveFileList), ReopenSparseReviewsWithTheFullLiveFileList),
+                (nameof(PreserveExactGeneralEditorTextWhileTyping), PreserveExactGeneralEditorTextWhileTyping),
+                (nameof(ShowBothSourceRangesForMixedComments), ShowBothSourceRangesForMixedComments),
+                (nameof(NavigateSectionBoundariesBeforeOtherSections), NavigateSectionBoundariesBeforeOtherSections),
+                (nameof(EditHoveredCommentsWithoutDuplicatingFindings), EditHoveredCommentsWithoutDuplicatingFindings),
+                (nameof(ClampEditorPlacementToTheViewport), ClampEditorPlacementToTheViewport),
+                (nameof(MeasureSharedEditorsAndPreserveTyping), MeasureSharedEditorsAndPreserveTyping),
+                (nameof(AnchorEditorsAndCloseOnSelectionOrScroll), AnchorEditorsAndCloseOnSelectionOrScroll),
+                (nameof(ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff), ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff),
+                (nameof(ReopenHistoryReviewWithUncommentedSections), ReopenHistoryReviewWithUncommentedSections),
+                (nameof(OpenReviewAndSnapshotSelectorsWithFullSources), OpenReviewAndSnapshotSelectorsWithFullSources),
+                (nameof(KeepBrowsingDataOutOfSparseStorage), KeepBrowsingDataOutOfSparseStorage),
+                (nameof(KeepRecordedContextWhenTheSourceIsUnavailable), KeepRecordedContextWhenTheSourceIsUnavailable),
+                (nameof(CombinePathAndCommentPresenceFilters), CombinePathAndCommentPresenceFilters),
+                (nameof(ShowClearLabelsAndCopyablePaths), ShowClearLabelsAndCopyablePaths),
+                (nameof(SeparateChangedLocalSourcesFromRecordedContext), SeparateChangedLocalSourcesFromRecordedContext),
+                (nameof(ReviewedFilteringMeansAnyNonemptyComment), ReviewedFilteringMeansAnyNonemptyComment),
+                (nameof(OpenEmptyReviewsWithoutStartingASource), OpenEmptyReviewsWithoutStartingASource),
+                (nameof(KeepReviewActionsOutsideTheSearchEditor), KeepReviewActionsOutsideTheSearchEditor),
+                (nameof(DoNotExposeSourceCreationControlsInsideReviews), DoNotExposeSourceCreationControlsInsideReviews),
+                (nameof(RemovingTheLastCommentMakesTheFileUnreviewed), RemovingTheLastCommentMakesTheFileUnreviewed),
+                (nameof(DiscardObsoleteFileMarksWithoutLosingComments), DiscardObsoleteFileMarksWithoutLosingComments),
                 (nameof(LoadReviewControls), LoadReviewControls),
             };
             var failed = 0;
@@ -120,9 +145,8 @@ namespace SourceGit.ReviewTests
             var snapshot = CreateSnapshot("a\nb\nc\n");
             var id = snapshot.Id;
             snapshot.Files[0].Comments.Add(CreateComment(snapshot, 2));
-            snapshot.Files[0].Progress = ReviewFileProgress.Reviewed;
             snapshot.ComputeId();
-            Check(snapshot.Id == id, "Comment and progress edits must not change captured code identity.");
+            Check(snapshot.Id == id, "Comment edits must not change captured code identity.");
         }
 
         private static void MigrateUnchangedRangesAfterInsertedLines()
@@ -185,26 +209,21 @@ namespace SourceGit.ReviewTests
             Check(changed.Files[0].Comments[0].Anchor.Attachment == ReviewAttachment.OutsideDiff, "Code outside the visible hunks must not claim an inline attachment.");
         }
 
-        private static void PreserveStatesAndFileProgressAcrossUpdates()
+        private static void PreserveAllCommentStatesAcrossUpdates()
         {
             var old = CreateSnapshot("a\nb\ntarget\nc\nd\ne\nf\n");
-            old.Files[0].Progress = ReviewFileProgress.Reviewed;
             foreach (var state in Enum.GetValues<ReviewCommentState>())
             {
                 var comment = CreateComment(old, 3);
                 comment.State = state;
                 old.Files[0].Comments.Add(comment);
             }
-            var same = CreateSnapshot("a\nb\ntarget\nc\nd\ne\nf\n");
-            Migrate(old, same);
-            Check(same.Files[0].Progress == ReviewFileProgress.Reviewed, "Unchanged files must keep their reviewed mark.");
-            Check(same.Files[0].Comments.Select(x => x.State).SequenceEqual(Enum.GetValues<ReviewCommentState>()), "Every comment workflow state must survive migration.");
             var next = CreateSnapshot("a\nb\ntarget\nc\nd\ne\nf\nnew\n");
             Migrate(old, next);
-            Check(next.Files[0].Progress == ReviewFileProgress.Changed, "Changed files must require renewed review without resetting comments.");
+            Check(next.Files[0].Comments.Select(x => x.State).SequenceEqual(Enum.GetValues<ReviewCommentState>()), "Every comment workflow state must survive source updates.");
         }
 
-        private static void RequireReviewAfterBinaryIdentityChanges()
+        private static void PreserveFileCommentsAcrossBinaryIdentityChanges()
         {
             var old = CreateSnapshot("binary placeholder\n");
             var next = CreateSnapshot("other placeholder\n");
@@ -213,9 +232,10 @@ namespace SourceGit.ReviewTests
             next.Files[0].OldContent = next.Files[0].NewContent = string.Empty;
             old.Files[0].SourceIdentity = "old binary";
             next.Files[0].SourceIdentity = "new binary";
-            old.Files[0].Progress = ReviewFileProgress.Reviewed;
+            old.Files[0].Comments.Add(new ReviewComment { Body = "Binary finding", State = ReviewCommentState.Fixed, Anchor = new ReviewAnchor { Side = ReviewSide.File } });
             Migrate(old, next);
-            Check(next.Files[0].Progress == ReviewFileProgress.Changed, "Binary and metadata-only changes must invalidate the reviewed mark even without captured text hashes.");
+            Check(next.Files[0].HasReviewWork && next.Files[0].Comments.Single().State == ReviewCommentState.Fixed,
+                "Binary source changes must preserve file comments and their states.");
         }
 
         private static void MigrateRenamedFiles()
@@ -310,16 +330,19 @@ namespace SourceGit.ReviewTests
             Check(page.CurrentSnapshot.Files[0].Comments.Count == 1 && page.SavedReviews.Count == 1, "Typing must update one comment, not create one per keystroke.");
         }
 
-        private static void KeepFileProgressSeparateFromCommentStates()
+        private static void KeepReviewedMembershipAcrossCommentStateChanges()
         {
             using var page = new Reviews(CreateDirectory());
             var snapshot = CreateSnapshot("a\nb\nc\n");
             snapshot.Files[0].Comments.Add(CreateComment(snapshot, 2));
             page.OpenPreview(snapshot);
-            page.IsFileReviewed = true;
-            Check(snapshot.Files[0].Comments[0].State == ReviewCommentState.ToFix, "Reviewing a file must not resolve its comments.");
+            page.ReviewFilter = ReviewFileFilter.Reviewed;
             page.ResolveRemainingComments();
-            Check(page.IsFileReviewed, "Resolving comments must not alter the file's review progress.");
+            Check(page.Files.Count == 1 && snapshot.Files[0].Comments[0].State == ReviewCommentState.Fixed,
+                "Fixing a finding must keep its file reviewed because the comment still exists.");
+            page.BulkState = ReviewCommentState.Dismissed;
+            page.SetAllCommentStates();
+            Check(page.Files.Count == 1, "Dismissed comments must still count as review work.");
         }
 
         private static void UndoWholeFileStateChanges()
@@ -392,8 +415,9 @@ namespace SourceGit.ReviewTests
             Check(comment.Anchor.Side == ReviewSide.Old && comment.Anchor.StartLine == 2 && comment.Anchor.EndLine == 3,
                 "A deletion selection with surrounding context must anchor to the old source, not just its surviving new context.");
             var contextLine = new TextDiffLine(TextDiffLineType.Normal, "z", 3, 2);
-            Check(page.Context.FindComment(contextLine, ReviewPane.Old) != null && page.Context.FindComment(contextLine, ReviewPane.New) == null,
-                "Old-side comment markers must not appear on the new side of a split diff.");
+            var outside = new TextDiffLine(TextDiffLineType.Normal, "a", 1, 1);
+            Check(page.Context.FindComment(contextLine, ReviewPane.Old) != null && page.Context.FindComment(outside, ReviewPane.New) == null,
+                "Mixed comment markers must stay within their recorded old and new source ranges.");
         }
 
         private static void CaptureStagedUnstagedAndLocalSources()
@@ -602,22 +626,19 @@ namespace SourceGit.ReviewTests
             Check(markdown.Contains("line_2500", StringComparison.Ordinal) && !markdown.Contains("+line_1\n", StringComparison.Ordinal), "Saved review text must include only the commented region.");
         }
 
-        private static void ChooseHunkAndLineAnchorsWithToFixDefault()
+        private static void CommentOnSelectedRangesWithToFixDefault()
         {
             using var page = new Reviews(CreateDirectory());
             page.OpenPreview(CreateSnapshot("a\nb\nc\n"));
-            var line = page.Diff.CreateReviewSelection(ReviewCommentTarget.Line, ReviewPane.Combined, 2, 2);
-            var hunk = page.Diff.CreateReviewSelection(ReviewCommentTarget.Hunk, ReviewPane.Combined, 2, 2);
-            Check(line.StartIdx == 2 && line.EndIdx == 2 && hunk.StartIdx == 0 && hunk.EndIdx == 3, "Hunk and line commands must select different, precise source ranges.");
+            var line = page.Diff.CreateReviewSelection(ReviewPane.Combined, 2, 2);
+            var section = page.Diff.CreateReviewSelection(ReviewPane.Combined, 1, 3);
+            Check(line.StartIdx == 2 && line.EndIdx == 2 && section.StartIdx == 1 && section.EndIdx == 3, "Comment targets must follow the selected source range without expanding to a patch hunk.");
             page.Context.AcceptSelection(page.Diff.Data, line);
             page.Context.Body = "line finding";
             Check(page.Context.State == ReviewCommentState.ToFix && page.Context.SelectedComment.Anchor.StartLine == 2, "New comments must default to tofix and retain the selected source line.");
-            page.Context.AcceptSelection(page.Diff.Data, hunk);
-            page.Context.Body = "hunk finding";
-            Check(page.Context.SelectedComment.Anchor.StartLine == 1 && page.Context.SelectedComment.Anchor.EndLine == 3, "The hunk command must cover the complete hunk.");
-            var split = page.Diff.SwitchMode();
-            var oldHunk = split.CreateReviewSelection(ReviewCommentTarget.Hunk, ReviewPane.Old, 1, 1);
-            Check(oldHunk != null && oldHunk.EndIdx == 3, "A hunk command on an empty split-diff side must find the hunk on the other side.");
+            page.Context.AcceptSelection(page.Diff.Data, section);
+            page.Context.Body = "section finding";
+            Check(page.Context.SelectedComment.Anchor.StartLine == 1 && page.Context.SelectedComment.Anchor.EndLine == 3, "A selected section must retain its full source range.");
         }
 
         private static void SaveGeneralSubjectWithoutCapturingFiles()
@@ -784,11 +805,598 @@ namespace SourceGit.ReviewTests
             task.GetAwaiter().GetResult();
         }
 
+        private static void PreserveExactGeneralEditorTextWhileTyping()
+        {
+            using var page = new Reviews(CreateDirectory());
+            page.OpenPreview(CreateSnapshot("a\nb\n"));
+            foreach (var text in new[] { "subject", "subject\n", "subject\n\n", "subject\n\n\n", "subject\n\n\nbody\n" })
+            {
+                page.GeneralReviewMessage = text;
+                Check(page.GeneralReviewMessage == text, "Typing must not reconstruct the editor document, insert blank lines, or move the caret.");
+            }
+        }
+
+        private static void ShowBothSourceRangesForMixedComments()
+        {
+            using var page = new Reviews(CreateDirectory());
+            page.OpenPreview(CreateSnapshot("a\nb\n"));
+            var anchor = new ReviewAnchor { Side = ReviewSide.New, StartLine = 20, EndLine = 23, OldStartLine = 10, OldEndLine = 12, NewStartLine = 20, NewEndLine = 23 };
+            page.Context.BeginComment(anchor);
+            Check(page.Context.AnchorLabel == "Old: 10-12, New: 20-23", "Mixed targets must display both old and new source coordinates.");
+        }
+
+        private static void NavigateSectionBoundariesBeforeOtherSections()
+        {
+            var lines = new List<TextDiffLine>
+            {
+                new(TextDiffLineType.Normal, "before", 1, 1),
+                new(TextDiffLineType.Deleted, "old", 2, 0),
+                new(TextDiffLineType.Added, "new", 0, 2),
+                new(TextDiffLineType.Normal, "between", 3, 3),
+                new(TextDiffLineType.Normal, "context", 4, 4),
+                new(TextDiffLineType.Added, "second", 0, 5),
+                new(TextDiffLineType.Normal, "after", 5, 6),
+            };
+            var navigation = new BlockNavigation(lines, 0);
+            Func<int, int> getOffset = line => (line - 1) * 10;
+            var position = 15;
+            foreach (var expected in new[] { 30, 50, 60, 60 })
+            {
+                position = navigation.FindBoundaryOffset(position, BlockNavigationDirection.Next, getOffset);
+                Check(position == expected, "Forward navigation must visit the current section end before the next section start.");
+            }
+            foreach (var expected in new[] { 50, 30, 10, 10 })
+            {
+                position = navigation.FindBoundaryOffset(position, BlockNavigationDirection.Prev, getOffset);
+                Check(position == expected, "Backward navigation must visit section boundaries in reverse without repeating a stop.");
+            }
+        }
+
+        private static void EditHoveredCommentsWithoutDuplicatingFindings()
+        {
+            using var page = new Reviews(CreateDirectory());
+            page.OpenPreview(CreateSnapshot("a\nb\nc\n"));
+            var chunk = page.Diff.CreateReviewSelection(ReviewPane.Combined, 2, 2);
+            page.Context.OpenComment(page.Diff.Data, chunk, false);
+            page.Context.Body = "first finding";
+            var existing = page.Context.SelectedComment;
+            page.Context.CloseEditor();
+            page.Context.SetCommentTarget(existing, false);
+            Check(page.Context.CommentActionLabel == App.Text("Reviews.EditComment"), "Hovering commented lines must offer Edit comment.");
+            page.Context.OpenComment(page.Diff.Data, chunk, false);
+            Check(ReferenceEquals(page.Context.SelectedComment, existing) && page.Comments.Count == 1, "Editing a hovered finding must not create another comment.");
+            page.Context.CloseEditor();
+            page.Context.SetCommentTarget(null, true);
+            Check(page.Context.CommentActionLabel == App.Text("Reviews.CommentSelection"), "Explicit selections must offer Comment on selection.");
+            page.Context.OpenComment(page.Diff.Data, chunk, true);
+            page.Context.Body = "second finding";
+            Check(page.Comments.Count == 2, "An explicit new selection must still support another finding on the same line.");
+        }
+
+        private static void ClampEditorPlacementToTheViewport()
+        {
+            Check(SourceGit.Views.TextDiffView.CalculateEditorTop(100, 200, 500) == 100, "Visible targets must retain their top anchor.");
+            Check(SourceGit.Views.TextDiffView.CalculateEditorTop(-50, 200, 500) == 0, "Partially visible targets must clamp to the viewport top.");
+            Check(SourceGit.Views.TextDiffView.CalculateEditorTop(450, 200, 500) == 300, "Editors must move upward when the target is near the viewport bottom.");
+            Check(SourceGit.Views.TextDiffView.CalculateEditorTop(100, 600, 500) == 0, "Oversized editors must remain inside the viewport.");
+        }
+
+        private static bool s_reviewStylesLoaded;
+
+        private static void EnsureReviewStyles()
+        {
+            if (s_reviewStylesLoaded)
+                return;
+            s_reviewStylesLoaded = true;
+            var application = Application.Current;
+            var baseUri = new Uri("avares://SourceGit/");
+            application.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark;
+            foreach (var file in new[] { "Resources/Icons.axaml", "Resources/Themes.axaml", "Resources/Locales/en_US.axaml" })
+                application.Resources.MergedDictionaries.Add(new Avalonia.Markup.Xaml.Styling.ResourceInclude(baseUri) { Source = new Uri(baseUri, file) });
+            application.Resources["Fonts.Default"] = Avalonia.Media.FontFamily.Default;
+            application.Resources["Fonts.Monospace"] = Avalonia.Media.FontFamily.Default;
+            application.Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
+            application.Styles.Add(new Avalonia.Markup.Xaml.Styling.StyleInclude(baseUri) { Source = new Uri("avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml") });
+            application.Styles.Add(new Avalonia.Markup.Xaml.Styling.StyleInclude(baseUri) { Source = new Uri(baseUri, "Resources/Styles.axaml") });
+        }
+
+        private static Window OpenReviewWindow(Reviews page)
+        {
+            EnsureReviewStyles();
+            AwaitFileLoad(page.InitializeAsync());
+            var window = new Window { Width = 1400, Height = 900, Content = new SourceGit.Views.Reviews { DataContext = page } };
+            window.Show();
+            PumpLayout(window);
+            return window;
+        }
+
+        private static void PumpLayout(Window window)
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+            }
+        }
+
+        private static void MeasureSharedEditorsAndPreserveTyping()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\nc\n");
+            snapshot.Source = ReviewSourceKind.Commit;
+            page.OpenPreview(snapshot);
+            page.UseSideBySide = false;
+            page.IsGeneralExpanded = true;
+            var window = OpenReviewWindow(page);
+            try
+            {
+                var view = (SourceGit.Views.Reviews)window.Content;
+                var section = view.FindControl<Grid>("GeneralReviewSection");
+                var frame = view.FindControl<Border>("GeneralReviewEditorFrame");
+                var editor = view.FindControl<SourceGit.Views.CommitMessageTextEditor>("GeneralReviewEditor");
+                Check(frame.Bounds.Width > 500 && Math.Abs(frame.Bounds.Width - section.Bounds.Width) < 1 && editor.Bounds.Width >= frame.Bounds.Width - 3,
+                    "General Review and its editor must stretch across the entire available pane.");
+                editor.TextArea.Selection = AvaloniaEdit.Editing.Selection.Create(editor.TextArea, 0, editor.Document.TextLength);
+                editor.TextArea.PerformTextInput("Subject\n\nBody");
+                foreach (var text in new[] { "\n", "\n", "next line", "\n" })
+                {
+                    var expected = editor.Text + text;
+                    editor.TextArea.PerformTextInput(text);
+                    PumpLayout(window);
+                    Check(editor.Text == expected && page.GeneralReviewMessage == expected && editor.CaretOffset == expected.Length,
+                        "Typing must preserve exact text and caret position in the shared general-review editor.");
+                }
+                var presenter = view.GetVisualDescendants().OfType<SourceGit.Views.ThemedTextDiffPresenter>().First();
+                presenter.CaretOffset = presenter.Document.GetLineByNumber(2).Offset;
+                presenter.MoveReviewBoundary(BlockNavigationDirection.Next, Avalonia.Input.KeyModifiers.Shift);
+                Check(presenter.SelectedText == "a\nb\nc\n", "Shift boundary movement must select the complete section, including its final line break.");
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+
+        private static void AnchorEditorsAndCloseOnSelectionOrScroll()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot(string.Join('\n', Enumerable.Range(1, 180).Select(x => $"line_{x}")) + "\n");
+            snapshot.Source = ReviewSourceKind.Commit;
+            page.OpenPreview(snapshot);
+            page.UseSideBySide = false;
+            var window = OpenReviewWindow(page);
+            try
+            {
+                var view = (SourceGit.Views.Reviews)window.Content;
+                var diff = view.GetVisualDescendants().OfType<SourceGit.Views.TextDiffView>().First();
+                var presenter = view.GetVisualDescendants().OfType<SourceGit.Views.ThemedTextDiffPresenter>().First();
+                var chunk = page.Diff.CreateReviewSelection(ReviewPane.Combined, 10, 10);
+                diff.RememberPresenter(presenter);
+                page.Context.OpenComment(page.Diff.Data, chunk, false);
+                PumpLayout(window);
+                var floating = diff.FindControl<Border>("ReviewEditor");
+                var body = floating.FindDescendantOfType<SourceGit.Views.ReviewCommentEditor>()
+                    .FindControl<SourceGit.Views.CommitMessageTextEditor>("BodyEditor");
+                body.TextArea.PerformTextInput("anchored finding");
+                foreach (var text in new[] { "\n", "\n", "continued" })
+                {
+                    var inserted = text == "\n" ? Environment.NewLine : text;
+                    var expected = body.Text + inserted;
+                    body.TextArea.PerformTextInput(text);
+                    PumpLayout(window);
+                    Check(body.Text == expected && page.Context.Body == expected && body.CaretOffset == expected.Length,
+                        $"Inline typing: text={body.Text.Replace("\n", "<LF>", StringComparison.Ordinal)}, expected={expected.Replace("\n", "<LF>", StringComparison.Ordinal)}, body={page.Context.Body.Replace("\n", "<LF>", StringComparison.Ordinal)}, caret={body.CaretOffset}, length={expected.Length}, editing={page.Context.IsEditing}.");
+                }
+                var finding = page.Context.Body;
+                PumpLayout(window);
+                Check(presenter.TryGetReviewBounds(out var bounds) && Math.Abs(floating.Margin.Top - SourceGit.Views.TextDiffView.CalculateEditorTop(bounds.Top, floating.DesiredSize.Height, diff.Bounds.Height)) < 1,
+                    "The editor must be positioned from the commented code, not an arbitrary pointer or viewport offset.");
+                var editor = floating.FindDescendantOfType<SourceGit.Views.ReviewCommentEditor>();
+                editor.FocusEditor();
+                editor.FindControl<SourceGit.Views.CommitMessageTextEditor>("BodyEditor").TextArea.RaiseEvent(new Avalonia.Input.KeyEventArgs
+                {
+                    RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent,
+                    Key = Avalonia.Input.Key.Escape,
+                });
+                PumpLayout(window);
+                Check(!page.Context.IsEditing && presenter.IsKeyboardFocusWithin, "Escape must close the editor and return keyboard focus to the diff.");
+                page.Context.OpenComment(page.Diff.Data, chunk, false);
+                PumpLayout(window);
+                presenter.TextArea.Selection = AvaloniaEdit.Editing.Selection.Create(presenter.TextArea,
+                    presenter.Document.GetLineByNumber(12).Offset, presenter.Document.GetLineByNumber(13).Offset);
+                Check(!page.Context.IsEditing && page.Comments.Single().Body == finding, "Changing the diff selection must close the editor without losing a finding.");
+                presenter.TextArea.ClearSelection();
+                page.Context.OpenComment(page.Diff.Data, chunk, false);
+                PumpLayout(window);
+                presenter.ScrollToLine(160);
+                PumpLayout(window);
+                Check(!page.Context.IsEditing, "Scrolling the commented range completely out of view must close its editor.");
+                var section = page.Diff.CreateReviewSelection(ReviewPane.Combined, 20, 100);
+                page.Context.OpenComment(page.Diff.Data, section, true);
+                page.Context.Body = "partially visible section";
+                PumpLayout(window);
+                var scroller = presenter.FindDescendantOfType<ScrollViewer>();
+                scroller.Offset = new Vector(scroller.Offset.X, presenter.TextArea.TextView.DefaultLineHeight * 50);
+                PumpLayout(window);
+                Check(page.Context.IsEditing && Math.Abs(floating.Margin.Top) < 1,
+                    $"Partial target: editing={page.Context.IsEditing}, top={floating.Margin.Top}, offset={scroller.Offset.Y}, first={presenter.TextArea.TextView.VisualLines[0].FirstDocumentLine.LineNumber}.");
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+
+        private static (string Repository, Review Review, string Commit) CreateSparseCommitReview()
+        {
+            var repository = CreateRepository();
+            var lines = Enumerable.Range(1, 100).Select(x => $"original_{x}").ToArray();
+            File.WriteAllText(Path.Combine(repository, "annotated.txt"), string.Join('\n', lines) + "\n");
+            File.WriteAllText(Path.Combine(repository, "other.txt"), "before\n");
+            RunGit(repository, "add", ".");
+            RunGit(repository, "commit", "-qm", "base");
+            lines[4] = "commented change";
+            lines[79] = "uncommented distant change";
+            File.WriteAllText(Path.Combine(repository, "annotated.txt"), string.Join('\n', lines) + "\n");
+            File.WriteAllText(Path.Combine(repository, "other.txt"), "after\n");
+            RunGit(repository, "add", ".");
+            RunGit(repository, "commit", "-qm", "review subject");
+            var commit = RunGit(repository, "rev-parse", "HEAD").Trim();
+            var capture = new CaptureReview(repository);
+            var snapshot = Task.Run(() => capture.CaptureAsync(ReviewSourceKind.Commit, string.Empty, commit)).GetAwaiter().GetResult();
+            Task.Run(() => capture.LoadFileAsync(snapshot, snapshot.Files.Single(x => x.Path == "annotated.txt"))).GetAwaiter().GetResult();
+            snapshot.Files[0].Comments.Add(CreateComment(snapshot, 5));
+            var review = new Review { Title = "review subject", Snapshots = [snapshot], LastSnapshotId = snapshot.Id };
+            var store = new ReviewStore(repository);
+            store.SaveAsync(review).GetAwaiter().GetResult();
+            var recorded = store.LoadReviews().Single().Snapshots[0].Files.Single();
+            Check(!recorded.Patch.Contains("uncommented distant change", StringComparison.Ordinal), "The fixture must persist only commented context, not the full diff.");
+            return (repository, review, commit);
+        }
+
+        private static void ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff()
+        {
+            var fixture = CreateSparseCommitReview();
+            using var page = new Reviews(fixture.Repository);
+            AwaitFileLoad(page.InitializeAsync());
+            page.SelectedComment = page.Comments.Single();
+            AwaitFileLoad(page.FileLoadTask);
+            Check(page.Context.SelectedComment?.Id == page.Comments.Single().Data.Id, "A comment selected while its full diff loads must still open after loading completes.");
+            Check(page.Files.Count == 2, "Opening a saved review must recover the complete source file list, not just persisted review items.");
+            Check(page.Diff.Data.Lines.Any(x => x.Content == "uncommented distant change"), "Annotated files must show uncommented sections when opened through the saved-review path.");
+        }
+
+        private static void ReopenHistoryReviewWithUncommentedSections()
+        {
+            var fixture = CreateSparseCommitReview();
+            using var page = new Reviews(fixture.Repository);
+            AwaitFileLoad(page.OpenSourceAsync(ReviewSourceKind.Commit, string.Empty, fixture.Commit));
+            AwaitFileLoad(page.FileLoadTask);
+            Check(page.Files.Count == 2 && page.CurrentReview.Id == fixture.Review.Id, "History must reopen the existing review with its full file list.");
+            Check(page.Diff.Data.Lines.Any(x => x.Content == "uncommented distant change"), "History must load the full annotated-file diff instead of treating a saved excerpt as complete.");
+        }
+
+        private static void OpenReviewAndSnapshotSelectorsWithFullSources()
+        {
+            var fixture = CreateSparseCommitReview();
+            var original = fixture.Review.Snapshots[0];
+            var file = original.Files[0];
+            var another = new ReviewSnapshot
+            {
+                Id = Review.ComputeHash("another recorded version"),
+                Source = original.Source,
+                BaseRevision = original.BaseRevision,
+                TargetRevision = original.TargetRevision,
+                SourceFingerprint = original.SourceFingerprint,
+                Subject = original.Subject,
+                IsLoaded = true,
+                Files = [new ReviewFile
+                {
+                    Path = file.Path,
+                    OldPath = file.OldPath,
+                    OldContent = file.OldContent,
+                    NewContent = file.NewContent,
+                    Patch = file.Patch,
+                    SourceIdentity = file.SourceIdentity,
+                    Comments = file.Comments.ConvertAll(x => x.Copy()),
+                }],
+            };
+            fixture.Review.Snapshots.Add(another);
+            fixture.Review.LastSnapshotId = another.Id;
+            new ReviewStore(fixture.Repository).SaveAsync(fixture.Review).GetAwaiter().GetResult();
+            using var page = new Reviews(fixture.Repository);
+            AwaitFileLoad(page.InitializeAsync());
+            AwaitFileLoad(page.FileLoadTask);
+            page.OpenPreview(CreateSnapshot("temporary preview\n"));
+            page.SelectedReview = page.SavedReviews.Single();
+            AwaitFileLoad(page.ReviewLoadTask);
+            AwaitFileLoad(page.FileLoadTask);
+            Check(page.Files.Count == 2 && page.Diff.Data.Lines.Any(x => x.Content == "uncommented distant change"), "The saved-review selector must restore complete file lists and full annotated-file diffs.");
+            page.SelectedSnapshot = page.CurrentReview.Snapshots[0];
+            AwaitFileLoad(page.ReviewLoadTask);
+            AwaitFileLoad(page.FileLoadTask);
+            Check(page.Files.Count == 2 && page.Diff.Data.Lines.Any(x => x.Content == "uncommented distant change"), "The snapshot selector must use the same complete browsing path.");
+        }
+
+        private static void KeepBrowsingDataOutOfSparseStorage()
+        {
+            var fixture = CreateSparseCommitReview();
+            using var page = new Reviews(fixture.Repository);
+            AwaitFileLoad(page.InitializeAsync());
+            AwaitFileLoad(page.FileLoadTask);
+            page.GeneralText = "General instructions after browsing";
+            page.FlushAsync().GetAwaiter().GetResult();
+            var store = new ReviewStore(fixture.Repository);
+            var saved = store.LoadReviews().Single();
+            var recorded = saved.Snapshots[0].Files.Single();
+            Check(!recorded.Patch.Contains("uncommented distant change", StringComparison.Ordinal), "Loading the full browsing diff must not expand persisted comment context.");
+            Check(!ReviewExport.CreateText(page.CurrentReview, page.CurrentSnapshot).Contains("uncommented distant change", StringComparison.Ordinal), "Copy Review must not copy uncommented browsing sections.");
+            var index = page.Diff.Data.Lines.FindIndex(x => x.Content == "uncommented distant change");
+            page.Context.OpenComment(page.Diff.Data, new TextDiffSelectedChunk(0, 0, index, index, true, false), true);
+            page.Context.Body = "New finding on the distant section";
+            page.FlushAsync().GetAwaiter().GetResult();
+            saved = store.LoadReviews().Single();
+            Check(saved.Snapshots[0].Files.Single().Comments.Count == 2 && saved.Snapshots[0].Files.Single().Patch.Contains("uncommented distant change", StringComparison.Ordinal),
+                "New comments on previously uncommented sections must retain their actual context without losing existing findings.");
+            page.SelectedFile = page.Files.Single(x => x.Path == "other.txt");
+            AwaitFileLoad(page.FileLoadTask);
+            page.Context.BeginFileComment();
+            page.Context.Body = "Finding on another file";
+            page.FlushAsync().GetAwaiter().GetResult();
+            saved = store.LoadReviews().Single();
+            Check(saved.Snapshots[0].Files.Count == 2 && saved.Snapshots[0].Files.Single(x => x.Path == "other.txt").Comments.Count == 1,
+                "Reviewing an unpersisted file after reopening must add it to the saved review.");
+            Check(Directory.GetFiles(Path.Combine(fixture.Repository, Review.DirectoryName), "*", SearchOption.AllDirectories).Length == 2,
+                "Complete browsing must not recreate per-file snapshot documents or full-source blobs.");
+        }
+
+        private static void KeepRecordedContextWhenTheSourceIsUnavailable()
+        {
+            var fixture = CreateSparseCommitReview();
+            Directory.Move(Path.Combine(fixture.Repository, ".git"), Path.Combine(CreateDirectory(), "original_git"));
+            using var page = new Reviews(fixture.Repository);
+            AwaitFileLoad(page.InitializeAsync());
+            AwaitFileLoad(page.FileLoadTask);
+            Check(page.Files.Count == 1 && page.Context != null && page.Comments.Count == 1,
+                "Unavailable Git objects must not prevent reading saved findings and their captured code.");
+            Check(page.FileViewNotice.Length > 0 && page.Status.Contains("Recorded context only", StringComparison.Ordinal),
+                "A context-only fallback must be explicit rather than pretending to be a complete file diff.");
+        }
+
+        private static void CombinePathAndCommentPresenceFilters()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\n");
+            snapshot.Files[0].Path = "src/reviewed.txt";
+            snapshot.Files[0].Comments.Add(CreateComment(snapshot, 1));
+            snapshot.Files.Add(new ReviewFile { Path = "src/unreviewed.txt" });
+            snapshot.Files.Add(new ReviewFile { Path = "generated/other.txt" });
+            page.OpenPreview(snapshot);
+            page.ReviewFilter = ReviewFileFilter.Reviewed;
+            Check(page.Files.Count == 1 && page.Files[0].Path == "src/reviewed.txt", "Reviewed filtering must follow nonempty comments.");
+            page.ReviewFilter = ReviewFileFilter.Unreviewed;
+            Check(page.Files.Count == 2, "Unreviewed filtering must include every file without comments.");
+            page.FileFilter = "src/";
+            Check(page.Files.Count == 1 && page.Files[0].Path == "src/unreviewed.txt", "Text and comment-presence filters must combine.");
+            page.Context.BeginFileComment();
+            page.Context.Body = "First finding";
+            Check(page.Files.Count == 1 && page.Context.IsEditing, "Adding a first comment must not remove the file while its editor is active.");
+            page.Context.CloseEditor();
+            Check(page.Files.Count == 0, "Closing a first comment must update the active unreviewed filter.");
+            page.FileFilter = string.Empty;
+            page.ReviewFilter = ReviewFileFilter.All;
+            Check(page.Files.Count == 3, "All-files filtering must restore every available file.");
+        }
+
+        private static void ShowClearLabelsAndCopyablePaths()
+        {
+            EnsureReviewStyles();
+            using var page = new Reviews(CreateDirectory());
+            foreach (var source in new[] { ReviewSourceKind.Staged, ReviewSourceKind.Unstaged, ReviewSourceKind.AllLocal })
+            {
+                var snapshot = CreateSnapshot("a\nb\n");
+                snapshot.Source = source;
+                page.OpenPreview(snapshot);
+                Check(page.ComparisonLabel == App.Text("Reviews.Source." + source), "Local comparisons must show their clear source names, not index/worktree internals.");
+            }
+            var commit = CreateSnapshot("a\nb\n");
+            commit.Source = ReviewSourceKind.Commit;
+            commit.Files[0].Path = "src/deep/nested/important_file.txt";
+            page.OpenPreview(commit);
+            var window = OpenReviewWindow(page);
+            var previous = s_lifetime.MainWindow;
+            s_lifetime.MainWindow = window;
+            try
+            {
+                var view = (SourceGit.Views.Reviews)window.Content;
+                Check(view.FindControl<SelectableTextBlock>("ComparisonLabel") != null && page.ComparisonLabel.Contains(" -> ", StringComparison.Ordinal),
+                    "Commit ranges must remain selectable and copyable.");
+                Check(page.SelectedFileFullPath == Path.GetFullPath(Path.Combine(page.GetFullPath(string.Empty), commit.Files[0].Path)),
+                    "The selected-file header must expose the full absolute path.");
+                var menu = view.CreateFileContextMenu(page.SelectedFile);
+                var copyPath = (MenuItem)menu.Items[0];
+                var copyFullPath = (MenuItem)menu.Items[1];
+                copyPath.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+                var clipboard = App.GetClipboardTextAsync();
+                AwaitFileLoad(clipboard);
+                Check(clipboard.Result == commit.Files[0].Path, "Copy Path must copy the repository-relative path.");
+                copyFullPath.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+                clipboard = App.GetClipboardTextAsync();
+                AwaitFileLoad(clipboard);
+                Check(clipboard.Result == page.SelectedFileFullPath, "Copy Full Path must copy the absolute path.");
+                var pathText = view.FindControl<ListBox>("FileList").GetVisualDescendants().OfType<TextBlock>().First(x => x.Text == commit.Files[0].Path);
+                Check(ReferenceEquals(pathText.TextTrimming, Avalonia.Media.TextTrimming.LeadingCharacterEllipsis) && pathText.TextAlignment == Avalonia.Media.TextAlignment.Right,
+                    "File paths must truncate from the left and align to the right so filenames remain visible.");
+            }
+            finally
+            {
+                s_lifetime.MainWindow = previous;
+                window.Close();
+            }
+        }
+
+        private static void SeparateChangedLocalSourcesFromRecordedContext()
+        {
+            var repository = CreateRepository();
+            var path = Path.Combine(repository, "file.txt");
+            var lines = Enumerable.Range(1, 100).Select(x => $"line_{x}").ToArray();
+            File.WriteAllText(path, string.Join('\n', lines) + "\n");
+            RunGit(repository, "add", ".");
+            RunGit(repository, "commit", "-qm", "base");
+            lines[4] = "recorded finding location";
+            lines[79] = "original unreviewed section";
+            File.WriteAllText(path, string.Join('\n', lines) + "\n");
+            var capture = new CaptureReview(repository);
+            var snapshot = Task.Run(() => capture.CaptureAsync(ReviewSourceKind.AllLocal)).GetAwaiter().GetResult();
+            Task.Run(() => capture.LoadFileAsync(snapshot, snapshot.Files[0])).GetAwaiter().GetResult();
+            snapshot.Files[0].Comments.Add(CreateComment(snapshot, 5));
+            new ReviewStore(repository).SaveAsync(new Review { Snapshots = [snapshot], LastSnapshotId = snapshot.Id }).GetAwaiter().GetResult();
+            using (var unchanged = new Reviews(repository))
+            {
+                AwaitFileLoad(unchanged.InitializeAsync());
+                AwaitFileLoad(unchanged.FileLoadTask);
+                Check(unchanged.Diff.Data.Lines.Any(x => x.Content == "original unreviewed section") && unchanged.FileViewNotice.Length == 0,
+                    "Unchanged local reviews must recover complete browsing diffs, not only their saved findings.");
+            }
+            lines[79] = "later local edits";
+            File.WriteAllText(path, string.Join('\n', lines) + "\n");
+            using var page = new Reviews(repository);
+            AwaitFileLoad(page.InitializeAsync());
+            AwaitFileLoad(page.FileLoadTask);
+            Check(page.FileViewNotice.Length > 0 && !page.Diff.Data.Lines.Any(x => x.Content == "later local edits"),
+                "Changed local sources must not silently replace recorded code or place old comments on unverified current lines.");
+            AwaitFileLoad(page.CheckSourceAsync());
+            Check(page.SourceChanged, "A context-only view of changed local code must keep Update snapshot available.");
+            AwaitFileLoad(page.UpdateSnapshot());
+            AwaitFileLoad(page.FileLoadTask);
+            Check(page.Diff.Data.Lines.Any(x => x.Content == "later local edits") && page.Comments.Count == 1 && page.FileViewNotice.Length == 0,
+                "An explicit update must load the complete new diff and conservatively preserve existing findings.");
+        }
+
+        private static void ReviewedFilteringMeansAnyNonemptyComment()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\n");
+            foreach (var state in Enum.GetValues<ReviewCommentState>())
+                snapshot.Files.Add(new ReviewFile { Path = state + ".txt", Comments = [new ReviewComment { Body = "finding", State = state }] });
+            snapshot.Files.Add(new ReviewFile { Path = "empty.txt", Comments = [new ReviewComment { Body = "  \n" }] });
+            page.OpenPreview(snapshot);
+            page.ReviewFilter = ReviewFileFilter.Reviewed;
+            Check(page.Files.Count == 4, "Reviewed must mean at least one nonempty comment in any workflow state.");
+            page.ReviewFilter = ReviewFileFilter.Unreviewed;
+            Check(page.Files.Count == 2, "Unreviewed must mean no nonempty comments, without a separate manual file mark.");
+        }
+
+        private static void OpenEmptyReviewsWithoutStartingASource()
+        {
+            var repository = CreateRepository();
+            using var page = new Reviews(repository);
+            AwaitFileLoad(page.InitializeAsync());
+            Check(!page.HasReview && page.CurrentSnapshot == null && page.Files.Count == 0,
+                "Opening an empty Reviews page must not silently create a staged preview.");
+            Check(!Directory.Exists(Path.Combine(repository, Review.DirectoryName)), "The empty Reviews page must not create review data.");
+        }
+
+        private static void KeepReviewActionsOutsideTheSearchEditor()
+        {
+            EnsureReviewStyles();
+            var view = new SourceGit.Views.WorkingCopy();
+            var window = new Window { Width = 1000, Height = 700, Content = view };
+            window.Show();
+            try
+            {
+                PumpLayout(window);
+                var search = view.FindControl<TextBox>("LocalChangesSearchBox");
+                var button = view.FindControl<Button>("LocalChangesReviewsButton");
+                var clear = view.FindControl<Button>("LocalChangesClearFilterButton");
+                search.Text = new string('x', 200);
+                clear.IsVisible = true;
+                foreach (var width in new[] { 1000, 700 })
+                {
+                    window.Width = width;
+                    PumpLayout(window);
+                    var searchOrigin = search.TranslatePoint(default, view).Value;
+                    var buttonOrigin = button.TranslatePoint(default, view).Value;
+                    Check(search.Bounds.Width > 100 && button.Bounds.Width > 0 && buttonOrigin.X >= searchOrigin.X + search.Bounds.Width,
+                        "The Reviews button must have its own right-hand layout column, even with long search text and a narrow panel.");
+                    Check(ReferenceEquals(clear.FindAncestorOfType<TextBox>(), search), "The clear-search button must remain inside the search editor.");
+                }
+                button.Flyout.ShowAt(button);
+                PumpLayout(window);
+                var actions = ((MenuFlyout)button.Flyout).Items.OfType<MenuItem>().Select(x => x.Header?.ToString()).ToArray();
+                Check(actions.SequenceEqual(new[] { "Review Staged Changes", "Review Unstaged Changes", "Review All Local Changes" }),
+                    $"Local-change review action labels: {string.Join(" | ", actions)}.");
+                button.Flyout.Hide();
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+
+        private static void DoNotExposeSourceCreationControlsInsideReviews()
+        {
+            using var page = new Reviews(CreateDirectory());
+            page.OpenPreview(CreateSnapshot("a\nb\n"));
+            var view = new SourceGit.Views.Reviews { DataContext = page };
+            Check(!view.GetLogicalDescendants().OfType<ComboBox>().Any(x => x.ItemsSource?.GetType() == typeof(ReviewSourceKind[])),
+                "Reviews must not contain another source-creation selector.");
+            Check(view.GetLogicalDescendants().OfType<CheckBox>().Count() == 1,
+                "Reviews must retain the diff layout toggle without adding a separate file-reviewed checkbox.");
+        }
+
+        private static void RemovingTheLastCommentMakesTheFileUnreviewed()
+        {
+            var repository = CreateDirectory();
+            using var page = new Reviews(repository);
+            page.OpenPreview(CreateSnapshot("a\nb\n"));
+            page.Context.BeginFileComment();
+            page.Context.Body = "Only finding";
+            page.Context.CloseEditor();
+            page.FlushAsync().GetAwaiter().GetResult();
+            page.ReviewFilter = ReviewFileFilter.Reviewed;
+            page.Context.EditComment(page.Comments.Single().Data);
+            page.Context.Body = string.Empty;
+            Check(page.Files.Count == 1, "Clearing a comment must not remove the selected file before the editor closes.");
+            page.Context.CloseEditor();
+            Check(page.Files.Count == 0, "Removing the last nonempty comment must remove the file from Reviewed.");
+            page.ReviewFilter = ReviewFileFilter.Unreviewed;
+            Check(page.Files.Count == 1 && !page.Files[0].Data.HasReviewWork, "A file without comments must become Unreviewed.");
+            page.FlushAsync().GetAwaiter().GetResult();
+            Check(new ReviewStore(repository).LoadReviews().Single().Snapshots[0].Files.Count == 0,
+                "An emptied file must not retain saved code or a separate reviewed mark.");
+        }
+
+        private static void DiscardObsoleteFileMarksWithoutLosingComments()
+        {
+            var repository = CreateDirectory();
+            var snapshot = CreateSnapshot("a\nb\n");
+            snapshot.Files[0].Comments.Add(CreateComment(snapshot, 1));
+            snapshot.Files.Add(new ReviewFile { Path = "mark_only.txt", Comments = [new ReviewComment { Body = "temporary fixture note" }] });
+            var review = new Review { Title = "Keep this subject", GeneralText = "Keep these notes", Snapshots = [snapshot], LastSnapshotId = snapshot.Id };
+            var store = new ReviewStore(repository);
+            store.SaveAsync(review).GetAwaiter().GetResult();
+            var path = Path.Combine(repository, Review.DirectoryName, review.Id, "review.xml");
+            var xml = XElement.Load(path, LoadOptions.PreserveWhitespace);
+            foreach (var file in xml.Descendants("file"))
+            {
+                file.SetAttributeValue("progress", "obsolete reviewed mark");
+                if ((string)file.Attribute("path") == "mark_only.txt")
+                    file.Element("comments").RemoveNodes();
+            }
+            File.WriteAllText(path, xml.ToString());
+            var loaded = store.LoadReviews().Single();
+            Check(loaded.Title == review.Title && loaded.GeneralText == review.GeneralText && loaded.Snapshots[0].Files.Count == 1 &&
+                loaded.Snapshots[0].Files[0].Comments.Single().Body == "finding", "Obsolete marks must be ignored without losing comments, subjects, or general notes.");
+            store.SaveAsync(loaded).GetAwaiter().GetResult();
+            Check(!XElement.Load(path).Descendants("file").Any(x => x.Attribute("progress") != null), "Saving must remove obsolete progress attributes instead of retaining compatibility fields.");
+        }
+
         private static void LoadReviewControls()
         {
             var editor = new SourceGit.Views.ReviewCommentEditor();
-            Check(editor.FindControl<TextBox>("BodyEditor").VerticalContentAlignment == Avalonia.Layout.VerticalAlignment.Top,
-                "Comment text must be aligned to the top of the editor.");
+            Check(editor.FindControl<SourceGit.Views.CommitMessageTextEditor>("BodyEditor").ShowSubjectGuide == false,
+                "Comments must use the shared editor without commit-subject decorations.");
             _ = new SourceGit.Views.Reviews();
             _ = new SourceGit.Views.TextDiffView();
         }

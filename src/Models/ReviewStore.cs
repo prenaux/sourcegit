@@ -78,7 +78,8 @@ namespace SourceGit.Models
                                     throw new InvalidDataException("Duplicate review file path.");
                                 if (ReadAttribute(xml, "captureHash") != ComputeCaptureHash(file))
                                     throw new InvalidDataException("Recorded review context has changed.");
-                                snapshot.Files.Add(file);
+                                if (file.HasReviewWork)
+                                    snapshot.Files.Add(file);
                             }
                             snapshot.IsLoaded = true;
                         }
@@ -205,8 +206,7 @@ namespace SourceGit.Models
                     var item = new XElement("file", new XAttribute("path", file.Path), new XAttribute("oldPath", file.OldPath),
                         new XAttribute("oldContent", file.OldContent), new XAttribute("newContent", file.NewContent),
                         new XAttribute("identity", file.SourceIdentity), new XAttribute("binary", file.IsBinary),
-                        new XAttribute("outsideDiff", file.IsOutsideDiff), new XAttribute("captureHash", ComputeCaptureHash(saved)),
-                        new XAttribute("progress", file.Progress.ToString().ToLowerInvariant()), CreateText("patch", patch));
+                        new XAttribute("outsideDiff", file.IsOutsideDiff), new XAttribute("captureHash", ComputeCaptureHash(saved)), CreateText("patch", patch));
                     var notes = new XElement("comments");
                     foreach (var comment in comments)
                         notes.Add(new XElement("comment", new XAttribute("id", comment.Id),
@@ -262,7 +262,6 @@ namespace SourceGit.Models
                 SourceIdentity = ReadAttribute(xml, "identity"),
                 IsBinary = (bool?)xml.Attribute("binary") ?? false,
                 IsOutsideDiff = (bool?)xml.Attribute("outsideDiff") ?? false,
-                Progress = ReadEnum<ReviewFileProgress>(xml, "progress"),
                 SavedVersion = 0,
             };
             foreach (var comment in xml.Element("comments")?.Elements("comment") ?? [])

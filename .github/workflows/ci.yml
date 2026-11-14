@@ -28,8 +28,8 @@ jobs:
           dotnet format whitespace src/SourceGit.csproj --no-restore --verify-no-changes --include
           src/Commands/CaptureReview.cs src/Commands/Diff.cs src/Converters/ReviewConverters.cs
           src/Models/Review.cs src/Models/ReviewPatch.cs src/Models/ReviewMigration.cs src/Models/ReviewStore.cs src/Models/ReviewExport.cs
-          src/ViewModels/Reviews.cs src/ViewModels/ReviewDiffContext.cs src/ViewModels/TextDiffContext.cs
-          src/Views/Reviews.axaml.cs src/Views/ReviewCommentEditor.axaml.cs src/Views/TextDiffView.axaml.cs src/Views/Histories.axaml.cs
+          src/ViewModels/Reviews.cs src/ViewModels/ReviewDiffContext.cs src/ViewModels/TextDiffContext.cs src/ViewModels/BlockNavigation.cs
+          src/Views/Reviews.axaml.cs src/Views/ReviewCommentEditor.axaml.cs src/Views/TextDiffView.axaml.cs src/Views/Histories.axaml.cs src/Views/CommitMessageToolBox.axaml.cs
       - name: Check review regression formatting
         run: dotnet format whitespace tests/Reviews/Reviews.csproj --no-restore --verify-no-changes --include tests/Reviews/Program.cs
       - name: Check tree state formatting

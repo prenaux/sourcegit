@@ -3,6 +3,7 @@
              xmlns:m="using:SourceGit.Models"
              xmlns:vm="using:SourceGit.ViewModels"
              xmlns:c="using:SourceGit.Converters"
+             xmlns:v="using:SourceGit.Views"
              x:Class="SourceGit.Views.ReviewCommentEditor"
              x:DataType="vm:ReviewDiffContext">
   <Border Background="{DynamicResource Brush.Popup}" BorderBrush="{DynamicResource Brush.Border2}" BorderThickness="1" CornerRadius="4" Padding="10">
@@ -10,10 +11,14 @@
       <StackPanel Spacing="8">
         <TextBlock Text="{Binding AnchorLabel}" FontWeight="Bold"/>
         <TextBlock Text="{Binding AttachmentLabel}" Foreground="{DynamicResource Brush.FG2}"/>
-        <TextBox x:Name="BodyEditor" Text="{Binding Body, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                 AcceptsReturn="True" TextWrapping="Wrap" MinHeight="100" MaxHeight="260"
-                 VerticalContentAlignment="Top" HorizontalContentAlignment="Left"
-                 Watermark="{DynamicResource Text.Reviews.CommentPlaceholder}"/>
+        <Border BorderBrush="{DynamicResource Brush.Border2}" BorderThickness="1" Background="{DynamicResource Brush.Contents}">
+          <v:CommitMessageTextEditor x:Name="BodyEditor" CommitMessage="{Binding Body, Mode=TwoWay}"
+                                     ShowSubjectGuide="False" MinHeight="100" Height="160" MaxHeight="260"
+                                     HorizontalAlignment="Stretch" VerticalAlignment="Top"
+                                     Foreground="{DynamicResource Brush.FG1}" FontFamily="{DynamicResource Fonts.Default}"
+                                     FontSize="{Binding Source={x:Static vm:Preferences.Instance}, Path=EditorFontSize}"
+                                     Placeholder="{DynamicResource Text.Reviews.CommentPlaceholder}"/>
+        </Border>
         <ComboBox ItemsSource="{Binding StateChoices}" SelectedItem="{Binding State, Mode=TwoWay}" HorizontalAlignment="Stretch">
           <ComboBox.ItemTemplate>
             <DataTemplate x:DataType="m:ReviewCommentState">

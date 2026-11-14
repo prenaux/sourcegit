@@ -122,6 +122,14 @@ namespace SourceGit.Views
             set => SetValue(SubjectLineBrushProperty, value);
         }
 
+        public static readonly StyledProperty<bool> ShowSubjectGuideProperty = AvaloniaProperty.Register<CommitMessageTextEditor, bool>(nameof(ShowSubjectGuide), true);
+
+        public bool ShowSubjectGuide
+        {
+            get => GetValue(ShowSubjectGuideProperty);
+            set => SetValue(ShowSubjectGuideProperty, value);
+        }
+
         protected override Type StyleKeyOverride => typeof(TextEditor);
 
         public CommitMessageTextEditor() : base(new TextArea(), new TextDocument())
@@ -166,7 +174,7 @@ namespace SourceGit.Views
                 return;
             }
 
-            if (TextArea.TextView is not { VisualLinesValid: true } view)
+            if (!ShowSubjectGuide || TextArea.TextView is not { VisualLinesValid: true } view)
                 return;
 
             var lines = new List<VisualLine>();
@@ -229,7 +237,7 @@ namespace SourceGit.Views
 
             if (change.Property == CommitMessageProperty)
             {
-                if (!_isEditing)
+                if (!_isEditing && Text != CommitMessage)
                     Text = CommitMessage;
 
                 var lines = CommitMessage.ReplaceLineEndings("\n").Split('\n');
@@ -283,6 +291,8 @@ namespace SourceGit.Views
             _isEditing = true;
             SetCurrentValue(CommitMessageProperty, Text);
             _isEditing = false;
+            if (!ShowSubjectGuide)
+                return;
 
             var caretOffset = CaretOffset;
             var lineStart = caretOffset;

@@ -26,11 +26,9 @@ namespace SourceGit.Models
             {
                 var comments = file.Comments.FindAll(x => !string.IsNullOrWhiteSpace(x.Body) &&
                     (scope == CommentScope.All || x.State is ReviewCommentState.Comment or ReviewCommentState.ToFix));
-                if (comments.Count == 0 && (scope != CommentScope.All || file.Progress == ReviewFileProgress.Unreviewed))
+                if (comments.Count == 0)
                     continue;
                 result.AppendLine().Append("## ").AppendLine(file.Path);
-                if (file.Progress != ReviewFileProgress.Unreviewed)
-                    result.AppendLine().Append("File progress: ").AppendLine(file.Progress.ToString());
                 foreach (var comment in comments)
                 {
                     result.AppendLine().Append("### ").AppendLine(comment.State.ToString().ToLowerInvariant());

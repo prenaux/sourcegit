@@ -39,13 +39,6 @@ namespace SourceGit.Models
         New,
     }
 
-    public enum ReviewFileProgress
-    {
-        Unreviewed,
-        Reviewed,
-        Changed,
-    }
-
     public class ReviewAnchor
     {
         public ReviewSide Side { get; set; }
@@ -98,10 +91,9 @@ namespace SourceGit.Models
         public string SourceIdentity { get; set; } = string.Empty;
         public bool IsUntracked { get; set; }
         public bool IsLoaded { get; set; } = true;
-        public bool HasReviewWork => Progress != ReviewFileProgress.Unreviewed || Comments.Exists(x => !string.IsNullOrWhiteSpace(x.Body));
+        public bool HasReviewWork => Comments.Exists(x => !string.IsNullOrWhiteSpace(x.Body));
         public bool IsBinary { get; set; }
         public bool IsOutsideDiff { get; set; }
-        public ReviewFileProgress Progress { get; set; }
         public List<ReviewComment> Comments { get; set; } = [];
         public long ChangeVersion { get; private set; }
         public long SavedVersion { get; set; } = -1;

@@ -4,10 +4,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace SourceGit.ViewModels
 {
-    public enum ReviewCommentTarget
+    public enum ReviewFileFilter
     {
-        Hunk,
-        Line,
+        All,
+        Reviewed,
+        Unreviewed,
     }
 
     public enum ReviewPane
@@ -17,18 +18,22 @@ namespace SourceGit.ViewModels
         New,
     }
 
-    public sealed class ReviewFileItem(Models.ReviewFile file) : ObservableObject
+    public sealed class ReviewFileItem(Models.ReviewFile file, Models.ReviewFile sourceFile) : ObservableObject
     {
         public Models.ReviewFile Data { get; } = file;
+        public Models.ReviewFile SourceFile { get; } = sourceFile;
+        public bool IsRecordedContext { get; set; } = sourceFile == null;
+        public Models.ReviewFile DisplayFile => IsRecordedContext ? Data : SourceFile;
         public string Path => Data.Path;
-        public string Progress => Data.IsOutsideDiff ? App.Text("Reviews.Attachment.OutsideDiff") : App.Text("Reviews.Progress." + Data.Progress);
+        public string ReviewStatus => Data.IsOutsideDiff ? App.Text("Reviews.Attachment.OutsideDiff") :
+            App.Text(Data.HasReviewWork ? "Reviews.Filter.Reviewed" : "Reviews.Filter.Unreviewed");
         public string CommentCount => App.Text("Reviews.CommentCounts", Data.Comments.Count,
             Data.Comments.FindAll(x => x.State == Models.ReviewCommentState.Comment).Count,
             Data.Comments.FindAll(x => x.State == Models.ReviewCommentState.ToFix).Count);
 
         public void Refresh()
         {
-            OnPropertyChanged(nameof(Progress));
+            OnPropertyChanged(nameof(ReviewStatus));
             OnPropertyChanged(nameof(CommentCount));
         }
     }
@@ -44,7 +49,7 @@ namespace SourceGit.ViewModels
             get
             {
                 var anchor = Data.Anchor.Attachment == Models.ReviewAttachment.Attached ? Data.Anchor : Data.OriginAnchor;
-                var location = anchor.Side == Models.ReviewSide.File ? App.Text("Reviews.FileComment") : $"{anchor.Side}: {anchor.StartLine}-{anchor.EndLine}";
+                var location = ReviewDiffContext.FormatAnchorLabel(anchor);
                 return Data.Anchor.Attachment == Models.ReviewAttachment.Attached ? location : App.Text("Reviews.OriginalLocation", location);
             }
         }
@@ -62,21 +67,29 @@ namespace SourceGit.ViewModels
     {
         private readonly Reviews _owner;
         private readonly Models.ReviewFile _file;
+        private readonly Models.ReviewFile _sourceFile;
         private Models.ReviewComment _comment;
         private Models.ReviewAnchor _draft;
         private string _body = string.Empty;
         private Models.ReviewCommentState _state = Models.ReviewCommentState.ToFix;
+        private Models.ReviewComment _hoveredComment;
+        private bool _hasSelection;
+
+        public event EventHandler EditorOpened;
+        public Models.ReviewAnchor ActiveAnchor => _comment?.Anchor ?? _draft;
+        public bool HasSelection => _hasSelection;
 
         public Models.ReviewCommentState[] StateChoices { get; } = Enum.GetValues<Models.ReviewCommentState>();
         public bool IsEditing => _comment != null || _draft != null;
         public bool CanReattach => _comment != null && _comment.Anchor.Attachment != Models.ReviewAttachment.Attached;
         public bool CanOpenOriginal => _comment != null && _comment.OriginAnchor.Side != Models.ReviewSide.File &&
             (_comment.OriginSnapshot != _owner.CurrentSnapshot.Id || CanReattach);
-        public string CommentActionLabel => App.Text(_owner.HasPendingReattach ? "Reviews.AttachComment" : "Reviews.AddComment");
+        public string CommentActionLabel => App.Text(_owner.HasPendingReattach ? "Reviews.AttachComment" :
+            _hoveredComment != null ? "Reviews.EditComment" : _hasSelection ? "Reviews.CommentSelection" : "Reviews.AddComment");
         public Models.ReviewComment SelectedComment => _comment;
         public string AttachmentLabel => _comment == null ? string.Empty : App.Text("Reviews.Attachment." + _comment.Anchor.Attachment);
         public string AnchorLabel => _comment != null && _comment.Anchor.Attachment != Models.ReviewAttachment.Attached ?
-            App.Text("Reviews.OriginalLocation", GetAnchorLabel(_comment.OriginAnchor)) : GetAnchorLabel(_comment?.Anchor ?? _draft);
+            App.Text("Reviews.OriginalLocation", FormatAnchorLabel(_comment.OriginAnchor)) : FormatAnchorLabel(ActiveAnchor);
 
         public string Body
         {
@@ -127,10 +140,11 @@ namespace SourceGit.ViewModels
             }
         }
 
-        public ReviewDiffContext(Reviews owner, Models.ReviewFile file)
+        public ReviewDiffContext(Reviews owner, Models.ReviewFile file, Models.ReviewFile sourceFile)
         {
             _owner = owner;
             _file = file;
+            _sourceFile = sourceFile;
         }
 
         public void BeginFileComment()
@@ -152,6 +166,7 @@ namespace SourceGit.ViewModels
             _state = Models.ReviewCommentState.ToFix;
             _owner.SelectComment(null);
             Refresh();
+            EditorOpened?.Invoke(this, EventArgs.Empty);
         }
 
         public void EditComment(Models.ReviewComment comment)
@@ -160,6 +175,8 @@ namespace SourceGit.ViewModels
             _draft = null;
             _owner.SelectComment(comment);
             Refresh();
+            if (comment != null)
+                EditorOpened?.Invoke(this, EventArgs.Empty);
         }
 
         public void CloseEditor()
@@ -171,6 +188,7 @@ namespace SourceGit.ViewModels
             _owner.ClearCommentSelection();
             _owner.CancelReattach();
             Refresh();
+            _owner.RefreshFileFilter();
         }
 
         public void BeginReattach()
@@ -194,6 +212,30 @@ namespace SourceGit.ViewModels
         {
             if (_comment != null)
                 await _owner.ShowOriginalAsync(_comment);
+        }
+
+        public void SetCommentTarget(Models.ReviewComment comment, bool hasSelection)
+        {
+            if (ReferenceEquals(_hoveredComment, comment) && _hasSelection == hasSelection)
+                return;
+            _hoveredComment = comment;
+            _hasSelection = hasSelection;
+            OnPropertyChanged(nameof(CommentActionLabel));
+        }
+
+        public void OpenComment(Models.TextDiff data, TextDiffSelectedChunk chunk, bool hasSelection)
+        {
+            if (!hasSelection && !_owner.HasPendingReattach && chunk.StartIdx == chunk.EndIdx && chunk.StartIdx >= 0 && chunk.StartIdx < data.Lines.Count)
+            {
+                var pane = chunk.Combined ? ReviewPane.Combined : chunk.IsOldSide ? ReviewPane.Old : ReviewPane.New;
+                var existing = FindComment(data.Lines[chunk.StartIdx], pane);
+                if (existing != null)
+                {
+                    EditComment(existing);
+                    return;
+                }
+            }
+            AcceptSelection(data, chunk);
         }
 
         public void AcceptSelection(Models.TextDiff data, TextDiffSelectedChunk chunk)
@@ -228,7 +270,7 @@ namespace SourceGit.ViewModels
             if (end == 0)
                 return;
 
-            var hash = side == Models.ReviewSide.Old ? _file.OldContent : _file.NewContent;
+            var hash = side == Models.ReviewSide.Old ? _sourceFile.OldContent : _sourceFile.NewContent;
             var selected = data.Lines.FindAll(x => x.Type is not (Models.TextDiffLineType.Indicator or Models.TextDiffLineType.None) &&
                 (side == Models.ReviewSide.Old ? x.OldLineNumber : x.NewLineNumber) >= start &&
                 (side == Models.ReviewSide.Old ? x.OldLineNumber : x.NewLineNumber) <= end);
@@ -246,7 +288,7 @@ namespace SourceGit.ViewModels
                 NewEndLine = newEnd,
                 Quote = string.Join("\n", selected.ConvertAll(x => x.Content)),
             };
-            Models.ReviewPatch.CaptureAnchorContext(anchor, _file.Patch,
+            Models.ReviewPatch.CaptureAnchorContext(anchor, _sourceFile.Patch,
                 selected.Count == end - start + 1 ? _owner.ReadContent(hash) : null);
             if (_owner.HasPendingReattach)
             {
@@ -274,12 +316,15 @@ namespace SourceGit.ViewModels
         {
             if (anchor.Side == Models.ReviewSide.File || anchor.Attachment != Models.ReviewAttachment.Attached)
                 return false;
-            var number = anchor.Side == Models.ReviewSide.Old ? line.OldLineNumber : line.NewLineNumber;
-            if (line.Type == Models.TextDiffLineType.None ||
-                (pane == ReviewPane.Old && anchor.Side != Models.ReviewSide.Old) ||
-                (pane == ReviewPane.New && anchor.Side != Models.ReviewSide.New))
+            if (line.Type is Models.TextDiffLineType.None or Models.TextDiffLineType.Indicator)
                 return false;
-            return number >= anchor.StartLine && number <= anchor.EndLine;
+            var oldStart = anchor.OldEndLine > 0 ? anchor.OldStartLine : anchor.Side == Models.ReviewSide.Old ? anchor.StartLine : 0;
+            var oldEnd = anchor.OldEndLine > 0 ? anchor.OldEndLine : anchor.Side == Models.ReviewSide.Old ? anchor.EndLine : 0;
+            var newStart = anchor.NewEndLine > 0 ? anchor.NewStartLine : anchor.Side == Models.ReviewSide.New ? anchor.StartLine : 0;
+            var newEnd = anchor.NewEndLine > 0 ? anchor.NewEndLine : anchor.Side == Models.ReviewSide.New ? anchor.EndLine : 0;
+            var oldMatch = line.OldLineNumber > 0 && line.OldLineNumber >= oldStart && line.OldLineNumber <= oldEnd;
+            var newMatch = line.NewLineNumber > 0 && line.NewLineNumber >= newStart && line.NewLineNumber <= newEnd;
+            return pane == ReviewPane.Old ? oldMatch : pane == ReviewPane.New ? newMatch : oldMatch || newMatch;
         }
 
         public void Refresh()
@@ -291,16 +336,24 @@ namespace SourceGit.ViewModels
             OnPropertyChanged(nameof(CanOpenOriginal));
             OnPropertyChanged(nameof(SelectedComment));
             OnPropertyChanged(nameof(AnchorLabel));
+            OnPropertyChanged(nameof(ActiveAnchor));
             OnPropertyChanged(nameof(AttachmentLabel));
             OnPropertyChanged(nameof(CommentActionLabel));
         }
 
-        private static string GetAnchorLabel(Models.ReviewAnchor anchor)
+        public static string FormatAnchorLabel(Models.ReviewAnchor anchor)
         {
             if (anchor == null)
                 return string.Empty;
-            return anchor.Side == Models.ReviewSide.File ? App.Text("Reviews.FileComment") :
-                $"{anchor.Side}: {anchor.StartLine}-{anchor.EndLine}";
+            if (anchor.Side == Models.ReviewSide.File)
+                return App.Text("Reviews.FileComment");
+            var oldEnd = anchor.OldEndLine > 0 ? anchor.OldEndLine : anchor.Side == Models.ReviewSide.Old ? anchor.EndLine : 0;
+            var newEnd = anchor.NewEndLine > 0 ? anchor.NewEndLine : anchor.Side == Models.ReviewSide.New ? anchor.EndLine : 0;
+            var oldStart = anchor.OldEndLine > 0 ? anchor.OldStartLine : anchor.StartLine;
+            var newStart = anchor.NewEndLine > 0 ? anchor.NewStartLine : anchor.StartLine;
+            if (oldEnd > 0 && newEnd > 0)
+                return $"Old: {oldStart}-{oldEnd}, New: {newStart}-{newEnd}";
+            return oldEnd > 0 ? $"Old: {oldStart}-{oldEnd}" : $"New: {newStart}-{newEnd}";
         }
     }
 }

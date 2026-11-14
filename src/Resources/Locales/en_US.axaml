@@ -824,14 +824,14 @@
   <x:String x:Key="Text.Reword" xml:space="preserve">Reword Commit Message</x:String>
   <x:String x:Key="Text.Running" xml:space="preserve">Running. Please wait...</x:String>
   <x:String x:Key="Text.Reviews" xml:space="preserve">REVIEWS</x:String>
-  <x:String x:Key="Text.Reviews.AddComment" xml:space="preserve">Comment on lines</x:String>
-  <x:String x:Key="Text.Reviews.AddHunkComment" xml:space="preserve">Comment on hunk</x:String>
+  <x:String x:Key="Text.Reviews.AddComment" xml:space="preserve">Comment</x:String>
+  <x:String x:Key="Text.Reviews.CommentSelection" xml:space="preserve">Comment on selection</x:String>
+  <x:String x:Key="Text.Reviews.EditComment" xml:space="preserve">Edit comment</x:String>
   <x:String x:Key="Text.Reviews.AddFileComment" xml:space="preserve">Add file comment</x:String>
   <x:String x:Key="Text.Reviews.AttachComment" xml:space="preserve">Attach comment here</x:String>
   <x:String x:Key="Text.Reviews.Attachment.Attached" xml:space="preserve">Attached</x:String>
   <x:String x:Key="Text.Reviews.Attachment.NeedsAttention" xml:space="preserve">Needs attention</x:String>
   <x:String x:Key="Text.Reviews.Attachment.OutsideDiff" xml:space="preserve">Outside current diff</x:String>
-  <x:String x:Key="Text.Reviews.BaseRevision" xml:space="preserve">Base revision</x:String>
   <x:String x:Key="Text.Reviews.BulkResult" xml:space="preserve">Updated {0} comments. Undo is available.</x:String>
   <x:String x:Key="Text.Reviews.CloseComment" xml:space="preserve">Close</x:String>
   <x:String x:Key="Text.Reviews.CommentCounts" xml:space="preserve">{0} comments ({1} comment, {2} tofix)</x:String>
@@ -840,20 +840,24 @@
   <x:String x:Key="Text.Reviews.CopyReview" xml:space="preserve">Copy Review</x:String>
   <x:String x:Key="Text.Reviews.DefaultTitle" xml:space="preserve">{0} - {1}</x:String>
   <x:String x:Key="Text.Reviews.FileComment" xml:space="preserve">Whole file</x:String>
+  <x:String x:Key="Text.Reviews.Empty" xml:space="preserve">Start a review from History or Local changes. Saved reviews appear here.</x:String>
+  <x:String x:Key="Text.Reviews.StartStaged" xml:space="preserve">Review Staged Changes</x:String>
+  <x:String x:Key="Text.Reviews.StartUnstaged" xml:space="preserve">Review Unstaged Changes</x:String>
+  <x:String x:Key="Text.Reviews.StartAllLocal" xml:space="preserve">Review All Local Changes</x:String>
+  <x:String x:Key="Text.Reviews.Filter.All" xml:space="preserve">All files</x:String>
+  <x:String x:Key="Text.Reviews.Filter.Reviewed" xml:space="preserve">Reviewed</x:String>
+  <x:String x:Key="Text.Reviews.Filter.Unreviewed" xml:space="preserve">Unreviewed</x:String>
+  <x:String x:Key="Text.Reviews.RecordedContextOnly" xml:space="preserve">Recorded comment context only. The original full source is unavailable or the local changes differ. Update the snapshot to review current changes.</x:String>
+  <x:String x:Key="Text.Reviews.SourceUnavailable" xml:space="preserve">Recorded context only. The full source could not be loaded: {0}</x:String>
   <x:String x:Key="Text.Reviews.FilterFiles" xml:space="preserve">Filter files</x:String>
   <x:String x:Key="Text.Reviews.GeneralPlaceholder" xml:space="preserve">Review subject on the first line, then a blank line and general notes.</x:String>
   <x:String x:Key="Text.Reviews.GeneralReview" xml:space="preserve">General Review</x:String>
-  <x:String x:Key="Text.Reviews.MarkReviewed" xml:space="preserve">Mark file reviewed</x:String>
   <x:String x:Key="Text.Reviews.MigrationResult" xml:space="preserve">Updated snapshot: {0} comments attached, {1} need attention, {2} outside current diff.</x:String>
   <x:String x:Key="Text.Reviews.NoChanges" xml:space="preserve">This comparison has no changes outside _reviews/.</x:String>
   <x:String x:Key="Text.Reviews.NoInlineDiff" xml:space="preserve">There is no inline text diff for this file in this snapshot. File comments remain available.</x:String>
   <x:String x:Key="Text.Reviews.OriginalLocation" xml:space="preserve">Original {0}</x:String>
   <x:String x:Key="Text.Reviews.OpenOriginal" xml:space="preserve">Show original commented code</x:String>
-  <x:String x:Key="Text.Reviews.Preview" xml:space="preserve">Preview changes</x:String>
-  <x:String x:Key="Text.Reviews.PreviewHint" xml:space="preserve">Unreviewed files are live previews. Comments, reviewed marks, and general review text are saved automatically.</x:String>
-  <x:String x:Key="Text.Reviews.Progress.Changed" xml:space="preserve">Changed since review</x:String>
-  <x:String x:Key="Text.Reviews.Progress.Reviewed" xml:space="preserve">Reviewed</x:String>
-  <x:String x:Key="Text.Reviews.Progress.Unreviewed" xml:space="preserve">Unreviewed</x:String>
+  <x:String x:Key="Text.Reviews.PreviewHint" xml:space="preserve">Unreviewed files are live previews. Comments and general review text are saved automatically.</x:String>
   <x:String x:Key="Text.Reviews.Reattach" xml:space="preserve">Move comment to selected lines</x:String>
   <x:String x:Key="Text.Reviews.ReattachHint" xml:space="preserve">Select the destination file and lines, then choose Attach comment here.</x:String>
   <x:String x:Key="Text.Reviews.ResolveRemaining" xml:space="preserve">Mark remaining comments fixed</x:String>
@@ -874,8 +878,6 @@
   <x:String x:Key="Text.Reviews.State.Comment" xml:space="preserve">comment</x:String>
   <x:String x:Key="Text.Reviews.State.Fixed" xml:space="preserve">fixed</x:String>
   <x:String x:Key="Text.Reviews.State.ToFix" xml:space="preserve">tofix</x:String>
-  <x:String x:Key="Text.Reviews.TargetRevision" xml:space="preserve">Target revision</x:String>
-  <x:String x:Key="Text.Reviews.Title" xml:space="preserve">Review title</x:String>
   <x:String x:Key="Text.Reviews.Undo" xml:space="preserve">Undo comment state change</x:String>
   <x:String x:Key="Text.Save" xml:space="preserve">SAVE</x:String>
   <x:String x:Key="Text.SaveAs" xml:space="preserve">Save As...</x:String>

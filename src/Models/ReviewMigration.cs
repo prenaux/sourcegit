@@ -28,13 +28,6 @@ namespace SourceGit.Models
                     };
                     next.Files.Add(file);
                 }
-                else if (oldFile.Progress != ReviewFileProgress.Unreviewed)
-                {
-                    file.Progress = oldFile.Path == file.Path && oldFile.OldContent == file.OldContent &&
-                        oldFile.NewContent == file.NewContent && oldFile.IsBinary == file.IsBinary &&
-                        (file.OldContent.Length > 0 || file.NewContent.Length > 0 || oldFile.SourceIdentity == file.SourceIdentity) ?
-                        oldFile.Progress : ReviewFileProgress.Changed;
-                }
 
                 foreach (var original in oldFile.Comments)
                 {

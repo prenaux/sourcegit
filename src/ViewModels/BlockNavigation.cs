@@ -92,6 +92,39 @@ namespace SourceGit.ViewModels
             return null;
         }
 
+        public int FindBoundaryOffset(int caretOffset, BlockNavigationDirection direction, Func<int, int> getLineOffset)
+        {
+            if (_blocks.Count == 0)
+                return caretOffset;
+            if (direction == BlockNavigationDirection.First)
+                return getLineOffset(_blocks[0].Start);
+            if (direction == BlockNavigationDirection.Last)
+                return getLineOffset(_blocks[^1].End + 1);
+            if (direction == BlockNavigationDirection.Next)
+            {
+                foreach (var block in _blocks)
+                {
+                    var start = getLineOffset(block.Start);
+                    if (start > caretOffset)
+                        return start;
+                    var end = getLineOffset(block.End + 1);
+                    if (end > caretOffset)
+                        return end;
+                }
+                return caretOffset;
+            }
+            for (var i = _blocks.Count - 1; i >= 0; i--)
+            {
+                var end = getLineOffset(_blocks[i].End + 1);
+                if (end < caretOffset)
+                    return end;
+                var start = getLineOffset(_blocks[i].Start);
+                if (start < caretOffset)
+                    return start;
+            }
+            return caretOffset;
+        }
+
         public Block Goto(BlockNavigationDirection direction)
         {
             if (_blocks.Count == 0)

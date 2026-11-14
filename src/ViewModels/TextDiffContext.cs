@@ -57,7 +57,7 @@ namespace SourceGit.ViewModels
             set => SetProperty(ref _selectedChunk, value);
         }
 
-        public TextDiffSelectedChunk CreateReviewSelection(ReviewCommentTarget target, ReviewPane pane, int first, int last)
+        public TextDiffSelectedChunk CreateReviewSelection(ReviewPane pane, int first, int last)
         {
             if (!IsReview || _data.Lines.Count == 0)
                 return null;
@@ -67,27 +67,13 @@ namespace SourceGit.ViewModels
                 return null;
             first = Math.Clamp(first, 0, lines.Count - 1);
             last = Math.Clamp(last, first, lines.Count - 1);
-            if (target == ReviewCommentTarget.Hunk)
-            {
-                var line = lines[first];
-                if (line.Type == Models.TextDiffLineType.None && this is TwoSideTextDiff twoSide)
-                    line = (pane == ReviewPane.Old ? twoSide.New : twoSide.Old)[first];
-                first = _data.Lines.IndexOf(line);
-                if (first < 0)
-                    return null;
-                while (first > 0 && _data.Lines[first].Type != Models.TextDiffLineType.Indicator)
-                    first--;
-                last = first;
-                while (last + 1 < _data.Lines.Count && _data.Lines[last + 1].Type != Models.TextDiffLineType.Indicator)
-                    last++;
-            }
-            else if (this is TwoSideTextDiff twoSide && pane != ReviewPane.Combined)
+            if (this is TwoSideTextDiff twoSide && pane != ReviewPane.Combined)
             {
                 if (first == last && lines[first].Type is Models.TextDiffLineType.None or Models.TextDiffLineType.Indicator)
                     return null;
                 twoSide.GetCombinedRangeForSingleSide(ref first, ref last, pane == ReviewPane.Old);
             }
-            return new TextDiffSelectedChunk(0, 0, first, last, target == ReviewCommentTarget.Hunk || pane == ReviewPane.Combined, pane == ReviewPane.Old);
+            return new TextDiffSelectedChunk(0, 0, first, last, pane == ReviewPane.Combined, pane == ReviewPane.Old);
         }
 
         public (int, int) FindRangeByIndex(List<Models.TextDiffLine> lines, int lineIdx)
