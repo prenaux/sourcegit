@@ -10,8 +10,9 @@
       <StackPanel Spacing="8">
         <TextBlock Text="{Binding AnchorLabel}" FontWeight="Bold"/>
         <TextBlock Text="{Binding AttachmentLabel}" Foreground="{DynamicResource Brush.FG2}"/>
-        <TextBox Text="{Binding Body, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+        <TextBox x:Name="BodyEditor" Text="{Binding Body, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                  AcceptsReturn="True" TextWrapping="Wrap" MinHeight="100" MaxHeight="260"
+                 VerticalContentAlignment="Top" HorizontalContentAlignment="Left"
                  Watermark="{DynamicResource Text.Reviews.CommentPlaceholder}"/>
         <ComboBox ItemsSource="{Binding StateChoices}" SelectedItem="{Binding State, Mode=TwoWay}" HorizontalAlignment="Stretch">
           <ComboBox.ItemTemplate>
@@ -21,8 +22,8 @@
           </ComboBox.ItemTemplate>
         </ComboBox>
         <WrapPanel Orientation="Horizontal">
-          <Button Margin="0,0,6,6" Content="{DynamicResource Text.Reviews.Reattach}" Command="{Binding BeginReattach}" IsEnabled="{Binding CanReattach}"/>
-          <Button Margin="0,0,6,6" Content="{DynamicResource Text.Reviews.OpenOriginal}" Command="{Binding OpenOriginal}" IsEnabled="{Binding CanOpenOriginal}"/>
+          <Button Margin="0,0,6,6" Content="{DynamicResource Text.Reviews.Reattach}" Command="{Binding BeginReattach}" IsVisible="{Binding CanReattach}"/>
+          <Button Margin="0,0,6,6" Content="{DynamicResource Text.Reviews.OpenOriginal}" Command="{Binding OpenOriginal}" IsVisible="{Binding CanOpenOriginal}"/>
           <Button Margin="0,0,0,6" Content="{DynamicResource Text.Reviews.CloseComment}" Command="{Binding CloseEditor}"/>
         </WrapPanel>
       </StackPanel>

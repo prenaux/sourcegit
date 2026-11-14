@@ -31,7 +31,8 @@ namespace SourceGit.Models
                 else if (oldFile.Progress != ReviewFileProgress.Unreviewed)
                 {
                     file.Progress = oldFile.Path == file.Path && oldFile.OldContent == file.OldContent &&
-                        oldFile.NewContent == file.NewContent && oldFile.Patch == file.Patch ?
+                        oldFile.NewContent == file.NewContent && oldFile.IsBinary == file.IsBinary &&
+                        (file.OldContent.Length > 0 || file.NewContent.Length > 0 || oldFile.SourceIdentity == file.SourceIdentity) ?
                         oldFile.Progress : ReviewFileProgress.Changed;
                 }
 
@@ -72,9 +73,13 @@ namespace SourceGit.Models
 
             if (oldHash != newHash)
             {
-                var oldLines = ReviewPatch.SplitLines(readContent(oldHash));
-                var newLines = ReviewPatch.SplitLines(readContent(newHash));
-                if (!TryMapRange(oldLines, newLines, anchor.StartLine, anchor.EndLine, out var start))
+                var originalText = readContent(oldHash);
+                var nextText = readContent(newHash);
+                var oldLines = ReviewPatch.SplitLines(originalText ?? anchor.ContextText);
+                var newLines = ReviewPatch.SplitLines(nextText);
+                var offset = originalText == null ? anchor.ContextStartLine - 1 : 0;
+                if (nextText == null || (originalText == null && !anchor.CanAutoMap) ||
+                    !TryMapRange(oldLines, newLines, anchor.StartLine - offset, anchor.EndLine - offset, out var start))
                 {
                     anchor.Attachment = ReviewAttachment.NeedsAttention;
                     return;
@@ -90,6 +95,7 @@ namespace SourceGit.Models
             anchor.Attachment = ReviewPatch.ContainsLine(next.Patch, anchor.Side, anchor.StartLine) &&
                 ReviewPatch.ContainsLine(next.Patch, anchor.Side, anchor.EndLine) ?
                 ReviewAttachment.Attached : ReviewAttachment.OutsideDiff;
+            ReviewPatch.CaptureAnchorContext(anchor, next.Patch, readContent(newHash));
         }
 
         public static bool TryMapRange(string[] oldLines, string[] newLines, int startLine, int endLine, out int mappedStart)

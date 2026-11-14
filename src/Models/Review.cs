@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
@@ -18,9 +19,9 @@ namespace SourceGit.Models
 
     public enum ReviewCommentState
     {
-        ToReview,
-        Todo,
-        Resolved,
+        Comment,
+        ToFix,
+        Fixed,
         Dismissed,
     }
 
@@ -56,6 +57,10 @@ namespace SourceGit.Models
         public int NewEndLine { get; set; }
         public ReviewAttachment Attachment { get; set; }
         public string Quote { get; set; } = string.Empty;
+        public string ContextPatch { get; set; } = string.Empty;
+        public string ContextText { get; set; } = string.Empty;
+        public int ContextStartLine { get; set; }
+        public bool CanAutoMap { get; set; }
 
         public ReviewAnchor Copy()
         {
@@ -67,7 +72,7 @@ namespace SourceGit.Models
     {
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
         public string Body { get; set; } = string.Empty;
-        public ReviewCommentState State { get; set; }
+        public ReviewCommentState State { get; set; } = ReviewCommentState.ToFix;
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
         public string OriginSnapshot { get; set; } = string.Empty;
         public string OriginPath { get; set; } = string.Empty;
@@ -90,6 +95,10 @@ namespace SourceGit.Models
         public string Patch { get; set; } = string.Empty;
         public string OldContent { get; set; } = string.Empty;
         public string NewContent { get; set; } = string.Empty;
+        public string SourceIdentity { get; set; } = string.Empty;
+        public bool IsUntracked { get; set; }
+        public bool IsLoaded { get; set; } = true;
+        public bool HasReviewWork => Progress != ReviewFileProgress.Unreviewed || Comments.Exists(x => !string.IsNullOrWhiteSpace(x.Body));
         public bool IsBinary { get; set; }
         public bool IsOutsideDiff { get; set; }
         public ReviewFileProgress Progress { get; set; }
@@ -111,8 +120,9 @@ namespace SourceGit.Models
         public string BaseRevision { get; set; } = string.Empty;
         public string TargetRevision { get; set; } = string.Empty;
         public string SourceFingerprint { get; set; } = string.Empty;
+        public string Subject { get; set; } = string.Empty;
         public List<ReviewFile> Files { get; set; } = [];
-        public Dictionary<string, string> Contents { get; } = [];
+        public ConcurrentDictionary<string, string> Contents { get; } = [];
         public bool IsLoaded { get; set; }
 
         public void ComputeId()
@@ -124,15 +134,7 @@ namespace SourceGit.Models
         {
             var builder = new StringBuilder();
             builder.Append(Source).Append('\0').Append(BaseRevision).Append('\0').Append(TargetRevision).Append('\0');
-            foreach (var file in Files)
-            {
-                if (file.IsOutsideDiff)
-                    continue;
-
-                builder.Append(file.Path).Append('\0').Append(file.OldPath).Append('\0')
-                    .Append(file.OldContent).Append('\0').Append(file.NewContent).Append('\0')
-                    .Append(file.IsBinary).Append('\0').Append(file.Patch).Append('\0');
-            }
+            builder.Append(SourceFingerprint);
             return Review.ComputeHash(builder.ToString());
         }
     }
@@ -140,10 +142,12 @@ namespace SourceGit.Models
     public class Review : ObservableObject
     {
         public const string DirectoryName = "_reviews";
+        public const string ArchiveDirectoryName = "_toremove/_reviews";
         private string _title = string.Empty;
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
         public string Title { get => _title; set => SetProperty(ref _title, value); }
         public string GeneralText { get; set; } = string.Empty;
+        public bool HasGeneralEdits { get; set; }
         public string LastSnapshotId { get; set; } = string.Empty;
         public List<ReviewSnapshot> Snapshots { get; set; } = [];
         public long ChangeVersion { get; private set; }
@@ -162,7 +166,9 @@ namespace SourceGit.Models
         public static bool IsReviewPath(string path)
         {
             return path.Equals(DirectoryName, StringComparison.Ordinal) ||
-                path.StartsWith(DirectoryName + "/", StringComparison.Ordinal);
+                path.StartsWith(DirectoryName + "/", StringComparison.Ordinal) ||
+                path.Equals(ArchiveDirectoryName, StringComparison.Ordinal) ||
+                path.StartsWith(ArchiveDirectoryName + "/", StringComparison.Ordinal);
         }
     }
 }

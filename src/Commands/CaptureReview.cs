@@ -2,8 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Security.Cryptography;
+using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SourceGit.Commands
@@ -13,7 +14,7 @@ namespace SourceGit.Commands
         private readonly string _repository;
         private const int CaptureAttempts = 2;
         private const int FullContextLines = 999999999;
-        private const string ExcludeReviews = "-- . \":(top,exclude)_reviews/**\" \":(top,exclude)_reviews\"";
+        private const string ReviewExclusions = "\":(top,exclude)_reviews/**\" \":(top,exclude)_reviews\" \":(top,exclude)_toremove/_reviews/**\"";
         private const string DiffFlags = "--no-color --no-ext-diff --no-textconv --no-relative --diff-algorithm=myers --no-indent-heuristic --find-renames --src-prefix=a/ --dst-prefix=b/";
 
         private enum ExitPolicy
@@ -38,69 +39,77 @@ namespace SourceGit.Commands
 
         public async Task<Models.ReviewSnapshot> CaptureAsync(Models.ReviewSourceKind source, string baseRevision = "", string targetRevision = "")
         {
-            for (var attempt = 0; attempt < CaptureAttempts; attempt++)
-            {
-                var snapshot = await ResolveSnapshotAsync(source, baseRevision, targetRevision);
-                var entries = await ReadEntriesAsync(snapshot);
-                var before = await ComputeFingerprintAsync(snapshot, entries);
-                var selection = GetComparisonArguments(snapshot);
-                var raw = await ReadGitAsync($"diff {DiffFlags} --patch --full-index --unified={FullContextLines} {selection} {ExcludeReviews}");
-                var patches = SplitFilePatches(raw);
-                var patchIndex = 0;
-                foreach (var entry in entries)
+            var snapshot = await ResolveSnapshotAsync(source, baseRevision, targetRevision);
+            var entries = await ReadEntriesAsync(snapshot);
+            entries.Sort((a, b) => StringComparer.Ordinal.Compare(a.Path, b.Path));
+            foreach (var entry in entries)
+                snapshot.Files.Add(new Models.ReviewFile
                 {
-                    string patch;
-                    if (entry.IsUntracked)
-                    {
-                        patch = await ReadGitAsync($"diff {DiffFlags} --no-index --patch --full-index --unified={FullContextLines} -- /dev/null {entry.Path.Quoted()}", ExitPolicy.Difference);
-                    }
-                    else
-                    {
-                        if (patchIndex >= patches.Count)
-                            throw new InvalidDataException("The changed-file list and captured patch differ. Retry the capture.");
-                        patch = patches[patchIndex++];
-                    }
-
-                    var parsed = Diff.ParsePatch(patch);
-                    var file = new Models.ReviewFile
-                    {
-                        Path = entry.Path,
-                        OldPath = entry.OldPath,
-                        Patch = parsed.TextDiff == null ? patch : Models.ReviewPatch.CreateContextPatch(patch, parsed.TextDiff),
-                        IsBinary = parsed.IsBinary || parsed.IsLFS,
-                    };
-                    if (parsed.TextDiff != null)
-                    {
-                        var oldText = Models.ReviewPatch.ExtractText(parsed.TextDiff, Models.ReviewSide.Old);
-                        var newText = Models.ReviewPatch.ExtractText(parsed.TextDiff, Models.ReviewSide.New);
-                        file.OldContent = Models.Review.ComputeHash(oldText);
-                        file.NewContent = Models.Review.ComputeHash(newText);
-                        snapshot.Contents[file.OldContent] = oldText;
-                        snapshot.Contents[file.NewContent] = newText;
-                    }
-                    snapshot.Files.Add(file);
-                }
-                if (patchIndex != patches.Count)
-                    throw new InvalidDataException("The captured patch contains unexpected files. Retry the capture.");
-
-                var latest = await ResolveSnapshotAsync(source, baseRevision, targetRevision);
-                var after = await ComputeFingerprintAsync(latest, await ReadEntriesAsync(latest));
-                if (before != after)
-                    continue;
-
-                snapshot.SourceFingerprint = before;
-                snapshot.IsLoaded = true;
-                snapshot.Files.Sort((a, b) => StringComparer.Ordinal.Compare(a.Path, b.Path));
-                snapshot.ComputeId();
-                return snapshot;
-            }
-            throw new IOException("The source changed while capturing the review. Retry after the edits or staging operation finish.");
+                    Path = entry.Path,
+                    OldPath = entry.OldPath,
+                    IsUntracked = entry.IsUntracked,
+                    SourceIdentity = GetEntryIdentity(snapshot, entry),
+                    IsLoaded = false,
+                });
+            snapshot.SourceFingerprint = Models.Review.ComputeHash(string.Join('\0', snapshot.Files.Select(x => x.SourceIdentity)));
+            snapshot.IsLoaded = true;
+            snapshot.ComputeId();
+            return snapshot;
         }
 
-        public async Task<string> ReadSourceFingerprintAsync(Models.ReviewSourceKind source)
+        public async Task LoadFileAsync(Models.ReviewSnapshot snapshot, Models.ReviewFile file, CancellationToken cancellationToken = default)
         {
-            var snapshot = await ResolveSnapshotAsync(source, string.Empty, string.Empty);
-            return await ComputeFingerprintAsync(snapshot, await ReadEntriesAsync(snapshot));
+            if (file.IsLoaded)
+                return;
+            var paths = new[] { file.Path, file.OldPath }.Where(x => x.Length > 0).Distinct().ToArray();
+            for (var attempt = 0; attempt < CaptureAttempts; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var before = await ReadEntriesAsync(snapshot, paths, cancellationToken);
+                var entry = before.Find(x => x.Path == file.Path);
+                if (entry == null)
+                    throw new IOException("This preview file changed or left the diff. Refresh the source list.");
+                var identity = GetEntryIdentity(snapshot, entry);
+                var patch = entry.IsUntracked ?
+                    await ReadGitAsync($"diff {DiffFlags} --no-index --patch --full-index --unified={FullContextLines} -- /dev/null {entry.Path.Quoted()}", ExitPolicy.Difference, cancellationToken) :
+                    await ReadGitAsync($"diff {DiffFlags} --patch --full-index --unified={FullContextLines} {GetComparisonArguments(snapshot)} {GetPathspec(paths)}", ExitPolicy.Success, cancellationToken);
+                var after = await ReadEntriesAsync(snapshot, paths, cancellationToken);
+                var latest = after.Find(x => x.Path == file.Path);
+                if (latest == null || identity != GetEntryIdentity(snapshot, latest))
+                    continue;
+                cancellationToken.ThrowIfCancellationRequested();
+                var parsed = Diff.ParsePatch(patch);
+                cancellationToken.ThrowIfCancellationRequested();
+                file.Patch = parsed.TextDiff == null ? patch : Models.ReviewPatch.CreateContextPatch(patch, parsed.TextDiff);
+                file.IsBinary = parsed.IsBinary || parsed.IsLFS;
+                if (parsed.TextDiff != null)
+                {
+                    var oldText = Models.ReviewPatch.ExtractText(parsed.TextDiff, Models.ReviewSide.Old);
+                    var newText = Models.ReviewPatch.ExtractText(parsed.TextDiff, Models.ReviewSide.New);
+                    file.OldContent = Models.Review.ComputeHash(oldText);
+                    file.NewContent = Models.Review.ComputeHash(newText);
+                    snapshot.Contents[file.OldContent] = oldText;
+                    snapshot.Contents[file.NewContent] = newText;
+                }
+                file.SourceIdentity = identity;
+                file.IsLoaded = true;
+                return;
+            }
+            throw new IOException("The file changed during capture. Retry after its edits finish.");
+        }
+
+        public async Task<bool> HaveFilesChangedAsync(Models.ReviewSnapshot snapshot, List<Models.ReviewFile> files)
+        {
+            if (files.Count == 0)
+                return false;
+            var entries = await ReadEntriesAsync(snapshot, files.Select(x => x.Path).ToArray());
+            foreach (var file in files)
+            {
+                var entry = entries.Find(x => x.Path == file.Path);
+                if (entry == null || file.SourceIdentity != GetEntryIdentity(snapshot, entry))
+                    return true;
+            }
+            return false;
         }
 
         private async Task<Models.ReviewSnapshot> ResolveSnapshotAsync(Models.ReviewSourceKind source, string baseRevision, string targetRevision)
@@ -111,12 +120,16 @@ namespace SourceGit.Commands
                 snapshot.TargetRevision = await ResolveRevisionAsync(targetRevision);
                 var parents = (await ReadGitAsync($"rev-list --parents -n 1 {snapshot.TargetRevision}")).Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 snapshot.BaseRevision = parents.Length > 1 ? parents[1] : Models.EmptyTreeHash.Guess(snapshot.TargetRevision);
+                snapshot.Subject = (await ReadGitAsync($"show -s --format=%s {snapshot.TargetRevision}")).Trim();
                 return snapshot;
             }
             if (source == Models.ReviewSourceKind.Comparison)
             {
                 snapshot.BaseRevision = await ResolveRevisionAsync(baseRevision);
                 snapshot.TargetRevision = await ResolveRevisionAsync(targetRevision);
+                var first = (await ReadGitAsync($"show -s --format=%s {snapshot.BaseRevision}")).Trim();
+                var last = (await ReadGitAsync($"show -s --format=%s {snapshot.TargetRevision}")).Trim();
+                snapshot.Subject = first + " -> " + last;
                 return snapshot;
             }
 
@@ -155,16 +168,22 @@ namespace SourceGit.Commands
             };
         }
 
-        private async Task<List<Entry>> ReadEntriesAsync(Models.ReviewSnapshot snapshot)
+        private static string GetPathspec(string[] paths = null)
+        {
+            var selection = paths == null ? "." : string.Join(' ', paths.Select(x => x.Quoted()));
+            return "-- " + selection + " " + ReviewExclusions;
+        }
+
+        private async Task<List<Entry>> ReadEntriesAsync(Models.ReviewSnapshot snapshot, string[] paths = null, CancellationToken cancellationToken = default)
         {
             if (snapshot.Source is Models.ReviewSourceKind.Staged or Models.ReviewSourceKind.Unstaged or Models.ReviewSourceKind.AllLocal)
             {
-                var unmerged = await ReadGitAsync("ls-files --unmerged -z " + ExcludeReviews);
+                var unmerged = await ReadGitAsync("ls-files --unmerged -z " + GetPathspec(paths), ExitPolicy.Success, cancellationToken);
                 if (unmerged.Length > 0)
                     throw new InvalidOperationException("Resolve index conflicts before capturing local changes for review.");
             }
 
-            var text = await ReadGitAsync($"diff {DiffFlags} --raw --no-abbrev -z {GetComparisonArguments(snapshot)} {ExcludeReviews}");
+            var text = await ReadGitAsync($"diff {DiffFlags} --raw --no-abbrev -z {GetComparisonArguments(snapshot)} {GetPathspec(paths)}", ExitPolicy.Success, cancellationToken);
             var fields = text.Split('\0', StringSplitOptions.RemoveEmptyEntries);
             var entries = new List<Entry>();
             for (var i = 0; i < fields.Length;)
@@ -189,7 +208,7 @@ namespace SourceGit.Commands
 
             if (snapshot.Source is Models.ReviewSourceKind.Unstaged or Models.ReviewSourceKind.AllLocal)
             {
-                var untracked = await ReadGitAsync("ls-files --others --exclude-standard -z " + ExcludeReviews);
+                var untracked = await ReadGitAsync("ls-files --others --exclude-standard -z " + GetPathspec(paths), ExitPolicy.Success, cancellationToken);
                 foreach (var path in untracked.Split('\0', StringSplitOptions.RemoveEmptyEntries))
                 {
                     if (Models.Review.IsReviewPath(path))
@@ -200,43 +219,23 @@ namespace SourceGit.Commands
             return entries;
         }
 
-        private async Task<string> ComputeFingerprintAsync(Models.ReviewSnapshot snapshot, List<Entry> entries)
+        private string GetEntryIdentity(Models.ReviewSnapshot snapshot, Entry entry)
         {
-            var builder = new StringBuilder();
-            builder.Append(snapshot.Source).Append('\0').Append(snapshot.BaseRevision).Append('\0').Append(snapshot.TargetRevision).Append('\0');
-            foreach (var entry in entries)
+            var identity = entry.Identity;
+            var local = snapshot.Source is Models.ReviewSourceKind.Unstaged or Models.ReviewSourceKind.AllLocal;
+            if (local && !entry.IsUntracked)
             {
-                var identity = entry.Identity;
-                if (snapshot.Source is Models.ReviewSourceKind.Unstaged or Models.ReviewSourceKind.AllLocal && !entry.IsUntracked)
-                {
-                    var fields = identity.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (fields.Length == 5)
-                        identity = string.Join(' ', fields[0], fields[1], fields[2], fields[4]);
-                }
-                builder.Append(identity).Append('\0').Append(entry.OldPath).Append('\0').Append(entry.Path).Append('\0');
-                if (snapshot.Source is not (Models.ReviewSourceKind.Unstaged or Models.ReviewSourceKind.AllLocal))
-                    continue;
-
-                var path = GetWorkingPath(entry.Path);
-                var info = new FileInfo(path);
-                if (info.LinkTarget is { } link)
-                {
-                    builder.Append(Models.Review.ComputeHash(link));
-                }
-                else if (File.Exists(path))
-                {
-                    await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                    builder.Append(Convert.ToHexStringLower(await SHA256.HashDataAsync(stream)));
-                }
-                else if (Directory.Exists(path))
-                {
-                    builder.Append(await ReadGitAsync($"-C {path.Quoted()} rev-parse HEAD"));
-                }
-                else
-                {
-                    builder.Append("missing");
-                }
-                builder.Append('\0');
+                var fields = identity.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (fields.Length == 5)
+                    identity = string.Join(' ', fields[0], fields[1], fields[2], fields[4]);
+            }
+            var builder = new StringBuilder(identity).Append('\0').Append(entry.OldPath).Append('\0').Append(entry.Path);
+            if (local)
+            {
+                var info = new FileInfo(GetWorkingPath(entry.Path));
+                builder.Append('\0').Append(info.LinkTarget);
+                if (info.Exists)
+                    builder.Append('\0').Append(info.Length).Append('\0').Append(info.LastWriteTimeUtc.Ticks);
             }
             return Models.Review.ComputeHash(builder.ToString());
         }
@@ -274,7 +273,7 @@ namespace SourceGit.Commands
             return result;
         }
 
-        private async Task<string> ReadGitAsync(string arguments, ExitPolicy policy = ExitPolicy.Success)
+        private async Task<string> ReadGitAsync(string arguments, ExitPolicy policy = ExitPolicy.Success, CancellationToken cancellationToken = default)
         {
             var start = new ProcessStartInfo(Native.OS.GitExecutable)
             {
@@ -291,9 +290,18 @@ namespace SourceGit.Commands
             start.Environment["LC_ALL"] = "C";
             using var process = new Process { StartInfo = start };
             process.Start();
-            var output = process.StandardOutput.ReadToEndAsync();
-            var error = process.StandardError.ReadToEndAsync();
-            await Task.WhenAll(output, error, process.WaitForExitAsync()).ConfigureAwait(false);
+            var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var error = process.StandardError.ReadToEndAsync(cancellationToken);
+            try
+            {
+                await Task.WhenAll(output, error, process.WaitForExitAsync(cancellationToken)).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                if (!process.HasExited)
+                    process.Kill(true);
+                throw;
+            }
             if (process.ExitCode == 0 || (policy == ExitPolicy.Difference && process.ExitCode == 1))
                 return await output;
             if (policy == ExitPolicy.Probe)

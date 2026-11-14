@@ -1,85 +1,112 @@
 # Local reviews
 
-Reviews capture code and retain comments while work changes. Open Reviews in the
-repository sidebar, use Reviews in Local changes, or choose Review changes from
-the History context menu for one commit or two comparison endpoints.
+Reviews retain findings and reviewed-file progress without archiving unrelated
+code. Open REVIEWS in the repository sidebar, use Reviews in Local changes, or
+choose Review changes from the History context menu for a commit or two
+comparison endpoints.
 
-## Capture a review
+## Open a source
 
-Select a commit, revision comparison, staged changes, unstaged changes, or all
+Choose a commit, revision comparison, staged changes, unstaged changes, or all
 local changes. A commit is compared with its first parent, or the empty tree for
-an initial commit. A revision comparison shows the net difference from its base
-to its target. Unstaged and all-local captures include untracked files that Git
-does not ignore.
+an initial commit. Revision comparisons show the net difference between the
+selected endpoints. Unstaged and all-local sources include untracked files that
+Git does not ignore.
 
-A matching saved snapshot reopens its existing review. Otherwise, the captured
-preview remains in memory until a comment, general note, or file-review mark is
-entered. The application saves those changes automatically. The save indicator
-reports pending writes and errors.
+The file list loads paths and status before file contents. Selecting a file
+loads its diff asynchronously. Selecting another file cancels obsolete loading.
+Unreviewed local files are live previews and reload when selected again. Opening
+or browsing a preview does not create review files.
 
-The file list includes comment counts and review progress. Select a saved review
-and a snapshot above the file list to return to earlier work. General review
-text and the title belong to the review, rather than an individual snapshot.
+A comment or explicit reviewed mark records the selected file's identity. Code
+already associated with review work does not reload silently. Update snapshot
+refreshes the source and migrates existing findings. Source-change checks are
+limited to reviewed and selected files, rather than hashing every working file.
 
-## Add and edit comments
+## Write the review
 
-Select one or several source lines and click Add comment. The comment editor
-remains open when the pointer leaves the selection. Gutter markers reopen inline
-comments and highlight their source ranges. The comments list also opens
-existing comments. Add file comment creates a comment without a line anchor.
+General Review uses the commit-message editor. Its first line is the review
+subject; a blank line separates the subject from the body. The section can be
+collapsed. Commit and comparison subjects supply the initial subject and appear
+in the snapshot selector with revision and date information.
+
+Comment on hunk records the current hunk. Comment on lines records the selected
+line or range with surrounding context. Add file comment records a finding about
+the file without capturing its entire diff. Comment text is top-aligned and
+saved automatically. Closing an empty or whitespace-only comment removes it.
 
 Comment states are fixed:
 
-- toreview: The finding needs evaluation.
-- todo: The finding requires action.
-- resolved: The finding has been addressed.
-- dismissed: The finding requires no action.
+- tofix is the default and identifies work that requires a change.
+- comment records an observation or discussion without requesting a change.
+- fixed identifies a finding that has been addressed.
+- dismissed identifies a finding that requires no action.
 
-Resolve remaining comments affects toreview and todo comments in the selected
-file. Set all comments applies the selected state to every comment in that file,
-including comments outside the current diff. Undo restores the previous states.
+Mark file reviewed is independent of comment state. It records the file's
+identity and progress, not a complete source backup. Mark remaining comments
+fixed affects comment and tofix entries in the selected file. Set all comments
+applies the selected state to every comment in that file, including comments
+outside the current diff. Undo restores the preceding states.
 
-Mark file reviewed records examination of the code without resolving findings.
-Review mode does not expose staging, unstaging, or discarding actions.
+## Navigate and update
 
-## Update a snapshot
+The diff toolbar provides first, previous, next, and last hunk navigation and a
+hunk position indicator. Review shortcuts are active only inside Reviews:
 
-The displayed code never updates automatically. For staged and local reviews,
-the source-change indicator offers Update snapshot. Existing snapshot IDs are
-reused; new code creates another snapshot within the same review.
+- Ctrl+M adds a comment on the current hunk.
+- Ctrl+Shift+M adds a comment on the current line or selected range.
+- Ctrl+Up and Ctrl+Down navigate hunks when a comment or general-text editor does
+  not have focus.
+- Enter focuses the selected comment's editor when the comments list has focus.
+- Escape closes the comment editor or cancels moving a comment.
 
-Updates copy comments and retain their IDs, original context, and workflow
-states. Unchanged files retain review progress. Changed reviewed files show
-Changed since review. Unique unchanged source ranges migrate automatically;
-ambiguous or edited ranges show Needs attention. Comments without a current diff
-location remain under their file as Outside current diff.
+The comment shortcuts also accept Command on macOS. Enter inside an editor
+continues to insert a newline.
 
-Reattach preserves a comment's identity and original anchor. Select its new file
-and lines, then click Attach comment here. Original snapshot opens its initial
-code context. Each snapshot retains its own comment text, states, and placements;
-editing an older snapshot does not rewrite a newer snapshot's comments.
+Updating preserves comment IDs and workflow states. Unchanged files retain their
+reviewed marks; changed reviewed files show Changed since review. Unambiguous
+unchanged ranges migrate using their recorded context. Edited or ambiguous
+ranges show Needs attention. Findings without a current diff location show
+Outside current diff. Neither condition resolves a finding automatically.
 
-## Storage and AI export
+Recovery actions appear only when applicable. Move comment to selected lines
+starts relocation: select its destination and choose Attach comment here. Show
+original commented code opens the recorded version in which the finding was
+added. Each recorded version retains its own comments and placements.
 
-All review data lives in the repository's `_reviews/` directory:
+## Storage and copying
 
-- `<review_id>/review.xml` contains the title, general text, and snapshot index.
-- `<review_id>/snapshots/<snapshot_id>/` contains the file index and one XML
-  record per file, including its patch and comments.
-- `_content/` contains captured text identified by content hashes. Identical
-  text is stored once and supports migration without current files or Git
-  objects.
+Active review data lives in the repository's `_reviews/` directory. Each review
+has two files under `<review_id>/`:
 
-The application does not change ignore rules or stage or commit these files.
-Review capture excludes `_reviews/`, including staged review files. XML records
-are replaced atomically. Captured code is checked against its snapshot identity,
-and captured text is checked against its content hash when read.
+- `review.md` presents the saved subject, general notes, findings, states,
+  locations, relevant code context, and reviewed-file progress as readable text.
+- `review.xml` retains compact metadata, anchors, and history for actual review
+  work. The application uses this file when reopening the review.
 
-Copy review for AI exports general text, standard unified patches, and toreview
-and todo comments. Resolved and dismissed comments are omitted. Uncertain
-attachments include their original context instead of claiming current line
-coordinates.
+Untouched files are not persisted. A line comment retains bounded surrounding
+context, even inside a large hunk. A hunk comment retains the selected hunk.
+General-only reviews do not capture file data. Full source files and per-file
+snapshot documents are not written. Saved context remains readable without the
+original Git objects or current working files.
 
-Binary and metadata-only changes support file comments rather than inline text
-comments. Local captures require a resolved index. Source changes during capture
-cause a retry or a visible capture error instead of replacing an existing review.
+Copy Review copies the subject, general notes, and active comment and tofix
+findings. Each finding precedes its location and relevant code context. It does
+not copy unrelated files or the entire comparison. Code blocks are partial diff
+context, not complete patches to apply. Fixed and dismissed findings remain in
+the saved Markdown but are omitted from the clipboard text. Uncertain findings
+include an explicit warning and their original context.
+
+The application converts the earlier snapshot-directory format when opening an
+existing review. It preserves findings, general text, workflow states, and
+recorded context, then writes the compact format. After successful conversion,
+old generated snapshots and full-source caches move to `_toremove/_reviews/` for
+inspection instead of being deleted. The legacy reader is used only for this
+one-time conversion; subsequent opens use the compact metadata. Conversion errors
+leave the original data available and appear in the review status.
+
+Review capture excludes both active review storage and its conversion archive.
+The application does not change ignore rules or stage these files. XML and
+Markdown writes use atomic replacement. Binary and metadata-only changes support
+file comments. Local sources require a resolved index; edits during a selected
+file capture cause a retry or a visible error.

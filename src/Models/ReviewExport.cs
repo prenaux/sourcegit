@@ -1,63 +1,69 @@
+using System;
 using System.Text;
 
 namespace SourceGit.Models
 {
     public static class ReviewExport
     {
-        public static string CreateText(Review review, ReviewSnapshot snapshot)
+        private enum CommentScope
+        {
+            Active,
+            All,
+        }
+
+        public static string CreateText(Review review, ReviewSnapshot snapshot) => CreateText(review, snapshot, CommentScope.Active);
+        public static string CreateDocument(Review review, ReviewSnapshot snapshot) => CreateText(review, snapshot, CommentScope.All);
+
+        private static string CreateText(Review review, ReviewSnapshot snapshot, CommentScope scope)
         {
             var result = new StringBuilder();
-            result.Append("Review: ").AppendLine(review.Title);
-            result.Append("Snapshot: ").AppendLine(snapshot.Id);
-            result.Append("Source: ").AppendLine(snapshot.Source.ToString());
-            result.Append("Comparison: ").Append(snapshot.BaseRevision).Append(" -> ").AppendLine(snapshot.TargetRevision);
-            result.AppendLine().AppendLine("General review:").AppendLine(review.GeneralText);
+            result.Append("# ").AppendLine(review.Title);
+            if (!string.IsNullOrWhiteSpace(review.GeneralText))
+                result.AppendLine().AppendLine(review.GeneralText);
+            result.AppendLine().Append("Source: ").Append(snapshot.Source).Append("; ")
+                .Append(snapshot.BaseRevision).Append(" -> ").AppendLine(snapshot.TargetRevision);
             foreach (var file in snapshot.Files)
             {
-                result.AppendLine().Append("File: ").AppendLine(file.Path);
-                if (file.Patch.Length > 0)
-                    AppendBlock(result, "diff", file.Patch);
-
-                foreach (var comment in file.Comments)
+                var comments = file.Comments.FindAll(x => !string.IsNullOrWhiteSpace(x.Body) &&
+                    (scope == CommentScope.All || x.State is ReviewCommentState.Comment or ReviewCommentState.ToFix));
+                if (comments.Count == 0 && (scope != CommentScope.All || file.Progress == ReviewFileProgress.Unreviewed))
+                    continue;
+                result.AppendLine().Append("## ").AppendLine(file.Path);
+                if (file.Progress != ReviewFileProgress.Unreviewed)
+                    result.AppendLine().Append("File progress: ").AppendLine(file.Progress.ToString());
+                foreach (var comment in comments)
                 {
-                    if (comment.State is ReviewCommentState.Resolved or ReviewCommentState.Dismissed)
-                        continue;
-
-                    result.AppendLine().Append("Comment ").Append(comment.Id).Append(" [")
-                        .Append(comment.State.ToString().ToLowerInvariant()).AppendLine("]:");
-                    if (comment.Anchor.Attachment == ReviewAttachment.Attached)
-                    {
-                        var path = comment.Anchor.Side == ReviewSide.Old && file.OldPath.Length > 0 ? file.OldPath : file.Path;
-                        AppendLocation(result, path, comment.Anchor);
-                    }
-                    else
+                    result.AppendLine().Append("### ").AppendLine(comment.State.ToString().ToLowerInvariant());
+                    result.AppendLine().AppendLine(comment.Body);
+                    var attached = comment.Anchor.Attachment == ReviewAttachment.Attached;
+                    var anchor = attached ? comment.Anchor : comment.OriginAnchor;
+                    var path = attached ? anchor.Side == ReviewSide.Old && file.OldPath.Length > 0 ? file.OldPath : file.Path : comment.OriginPath;
+                    result.AppendLine().Append("Location: ").Append(path);
+                    if (anchor.Side != ReviewSide.File)
+                        result.Append(" [").Append(anchor.Side).Append(" lines ").Append(anchor.StartLine).Append('-').Append(anchor.EndLine).Append(']');
+                    result.AppendLine();
+                    if (!attached)
                     {
                         result.Append("Attachment: ").AppendLine(comment.Anchor.Attachment.ToString());
-                        result.AppendLine("This comment is not attached to the current diff. Verify its applicability before changing code.");
+                        result.AppendLine("This comment is not attached to the current diff. The location and code below are its original context.");
                         result.Append("Original snapshot: ").AppendLine(comment.OriginSnapshot);
-                        AppendLocation(result, comment.OriginPath, comment.OriginAnchor);
-                        AppendBlock(result, "text", comment.OriginAnchor.Quote);
                     }
-                    AppendBlock(result, "text", comment.Body);
+                    var patch = anchor.ContextPatch.Length > 0 ? anchor.ContextPatch : ReviewPatch.SelectHunks(file.Patch, [anchor]);
+                    if (patch.Length > 0)
+                        AppendBlock(result, "diff", patch);
+                    else if (anchor.Quote.Length > 0)
+                        AppendBlock(result, "text", anchor.Quote);
                 }
             }
             return result.ToString();
         }
 
-        private static void AppendLocation(StringBuilder result, string path, ReviewAnchor anchor)
-        {
-            result.Append("Location: ").Append(path);
-            if (anchor.Side != ReviewSide.File)
-                result.Append(" [").Append(anchor.Side).Append(" lines ").Append(anchor.StartLine).Append('-').Append(anchor.EndLine).Append(']');
-            result.AppendLine();
-        }
-
         private static void AppendBlock(StringBuilder result, string language, string text)
         {
             var fence = "```";
-            while (text.Contains(fence, System.StringComparison.Ordinal))
+            while (text.Contains(fence, StringComparison.Ordinal))
                 fence += "`";
-            result.Append(fence).AppendLine(language).Append(text);
+            result.AppendLine().Append(fence).AppendLine(language).Append(text);
             if (!text.EndsWith('\n'))
                 result.AppendLine();
             result.AppendLine(fence);

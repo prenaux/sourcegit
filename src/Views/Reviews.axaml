@@ -22,7 +22,7 @@
       <TextBlock Margin="0,0,6,6" Text="{DynamicResource Text.Reviews.SourceChanged}" IsVisible="{Binding SourceChanged}" VerticalAlignment="Center"/>
     </WrapPanel>
 
-    <Grid Grid.Row="1" ColumnDefinitions="240,6,*,6,240" Margin="0,0,0,6" IsEnabled="{Binding !IsBusy}">
+    <Grid Grid.Row="1" ColumnDefinitions="*,6,*" Margin="0,0,0,6" IsEnabled="{Binding !IsBusy}">
       <ComboBox Grid.Column="0" ItemsSource="{Binding SavedReviews}" SelectedItem="{Binding SelectedReview, Mode=TwoWay}"
                 PlaceholderText="{DynamicResource Text.Reviews.SavedReviews}" HorizontalAlignment="Stretch">
         <ComboBox.ItemTemplate>
@@ -31,9 +31,7 @@
           </DataTemplate>
         </ComboBox.ItemTemplate>
       </ComboBox>
-      <TextBox Grid.Column="2" Text="{Binding Title, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-               IsEnabled="{Binding HasReview}" Watermark="{DynamicResource Text.Reviews.Title}"/>
-      <ComboBox Grid.Column="4" ItemsSource="{Binding Snapshots}" SelectedItem="{Binding SelectedSnapshot, Mode=TwoWay}" HorizontalAlignment="Stretch">
+      <ComboBox Grid.Column="2" ItemsSource="{Binding Snapshots}" SelectedItem="{Binding SelectedSnapshot, Mode=TwoWay}" HorizontalAlignment="Stretch">
         <ComboBox.ItemTemplate>
           <DataTemplate x:DataType="m:ReviewSnapshot">
             <TextBlock Text="{Binding Converter={x:Static c:ReviewConverters.ToSnapshotLabel}}"/>
@@ -80,7 +78,7 @@
           <Button Content="{DynamicResource Text.Reviews.Undo}" Command="{Binding UndoCommentStates}" IsEnabled="{Binding CanUndo}"/>
         </StackPanel>
         <TextBlock Grid.Row="3" Text="{DynamicResource Text.Reviews.Comments}" FontWeight="Bold" Margin="0,0,0,4"/>
-        <ListBox Grid.Row="4" ItemsSource="{Binding Comments}" SelectedItem="{Binding SelectedComment, Mode=TwoWay}" Background="{DynamicResource Brush.Contents}">
+        <ListBox x:Name="CommentList" Grid.Row="4" KeyDown="OnCommentsKeyDown" ItemsSource="{Binding Comments}" SelectedItem="{Binding SelectedComment, Mode=TwoWay}" Background="{DynamicResource Brush.Contents}">
           <ListBox.Styles>
             <Style Selector="ListBoxItem">
               <Setter Property="MinHeight" Value="72"/>
@@ -101,10 +99,23 @@
       </Grid>
       <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="Transparent"/>
       <Grid Grid.Column="2" RowDefinitions="Auto,*,Auto">
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="4,0,0,4">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="4,0,0,4">
           <TextBlock Text="{Binding ComparisonLabel}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
           <CheckBox Grid.Column="1" Content="{DynamicResource Text.Reviews.SideBySide}" IsChecked="{Binding UseSideBySide, Mode=TwoWay}" Margin="8,0"/>
-          <Button Grid.Column="2" Content="{DynamicResource Text.Reviews.CopyForAI}" Command="{Binding CopyForAI}" IsEnabled="{Binding HasReview}"/>
+          <Button Grid.Column="2" Classes="icon_button" Width="28" Click="OnGotoFirstChange" IsVisible="{Binding HasTextDiff}" ToolTip.Tip="{DynamicResource Text.Diff.First}">
+            <Path Width="12" Height="12" Data="{StaticResource Icons.Top}"/>
+          </Button>
+          <Button Grid.Column="3" Classes="icon_button" Width="28" Click="OnGotoPrevChange" IsVisible="{Binding HasTextDiff}" ToolTip.Tip="{DynamicResource Text.Diff.Prev}">
+            <Path Width="12" Height="12" Data="{StaticResource Icons.Up}"/>
+          </Button>
+          <TextBlock Grid.Column="4" Text="{Binding Diff.BlockNavigation.Indicator}" VerticalAlignment="Center" Margin="4,0"/>
+          <Button Grid.Column="5" Classes="icon_button" Width="28" Click="OnGotoNextChange" IsVisible="{Binding HasTextDiff}" ToolTip.Tip="{DynamicResource Text.Diff.Next}">
+            <Path Width="12" Height="12" Data="{StaticResource Icons.Down}"/>
+          </Button>
+          <Button Grid.Column="6" Classes="icon_button" Width="28" Click="OnGotoLastChange" IsVisible="{Binding HasTextDiff}" ToolTip.Tip="{DynamicResource Text.Diff.Last}">
+            <Path Width="12" Height="12" Data="{StaticResource Icons.Bottom}"/>
+          </Button>
+          <Button Grid.Column="7" Content="{DynamicResource Text.Reviews.CopyReview}" Command="{Binding CopyReview}" IsEnabled="{Binding HasReview}"/>
         </Grid>
         <Border Grid.Row="1" BorderBrush="{DynamicResource Brush.Border2}" BorderThickness="1" Background="{DynamicResource Brush.Contents}">
           <Grid ClipToBounds="True">
@@ -118,17 +129,24 @@
             <ScrollViewer IsVisible="{Binding !HasTextDiff}" VerticalScrollBarVisibility="Auto">
               <StackPanel Margin="12" Spacing="12">
                 <TextBlock Text="{DynamicResource Text.Reviews.NoInlineDiff}" TextWrapping="Wrap"/>
-                <Border IsVisible="{Binding Context.IsEditing}">
+                <Border IsVisible="{Binding Context.IsEditing, FallbackValue=False, TargetNullValue=False}">
                   <v:ReviewCommentEditor DataContext="{Binding Context}"/>
                 </Border>
               </StackPanel>
             </ScrollViewer>
+            <v:LoadingIcon Width="32" Height="32" IsVisible="{Binding IsLoadingFile}" IsHitTestVisible="False"/>
           </Grid>
         </Border>
-        <Expander Grid.Row="2" Header="{DynamicResource Text.Reviews.GeneralReview}" IsExpanded="False" IsEnabled="{Binding HasReview}" Margin="0,6,0,0">
-          <TextBox Text="{Binding GeneralText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                   AcceptsReturn="True" TextWrapping="Wrap" MinHeight="100" MaxHeight="240"
-                   Watermark="{DynamicResource Text.Reviews.GeneralPlaceholder}"/>
+        <Expander Grid.Row="2" Header="{DynamicResource Text.Reviews.GeneralReview}" IsExpanded="{Binding IsGeneralExpanded, Mode=TwoWay}" IsEnabled="{Binding HasReview}" Margin="0,6,0,0" HorizontalContentAlignment="Stretch">
+          <Border Background="{DynamicResource Brush.Contents}" BorderThickness="1" BorderBrush="{DynamicResource Brush.Border2}" CornerRadius="4">
+            <v:CommitMessageTextEditor CommitMessage="{Binding GeneralReviewMessage, Mode=TwoWay}"
+                                       Placeholder="{DynamicResource Text.Reviews.GeneralPlaceholder}"
+                                       SubjectLineBrush="{DynamicResource Brush.Border2}"
+                                       SubjectGuideLength="{Binding Source={x:Static vm:Preferences.Instance}, Path=SubjectGuideLength}"
+                                       Foreground="{DynamicResource Brush.FG1}" FontFamily="{DynamicResource Fonts.Default}"
+                                       FontSize="{Binding Source={x:Static vm:Preferences.Instance}, Path=EditorFontSize}"
+                                       MinHeight="140" Height="180" MaxHeight="300"/>
+          </Border>
         </Expander>
       </Grid>
     </Grid>

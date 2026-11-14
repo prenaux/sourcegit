@@ -100,7 +100,8 @@
     </ContentControl>
 
     <StackPanel x:Name="Popup" IsVisible="False" Orientation="Horizontal" VerticalAlignment="Top" HorizontalAlignment="Right" Effect="drop-shadow(0 0 8 #80000000)">
-      <Button Classes="flat" BorderBrush="{DynamicResource Brush.FlatButton.FloatingBorder}" Click="OnAddReviewComment" Content="{Binding Review.CommentActionLabel}" IsVisible="{Binding IsReview}"/>
+      <Button Classes="flat" BorderBrush="{DynamicResource Brush.FlatButton.FloatingBorder}" Click="OnAddReviewHunk" Content="{DynamicResource Text.Reviews.AddHunkComment}" ToolTip.Tip="Ctrl+M" IsVisible="{Binding IsReview}"/>
+      <Button Classes="flat" BorderBrush="{DynamicResource Brush.FlatButton.FloatingBorder}" Click="OnAddReviewComment" Content="{Binding Review.CommentActionLabel}" ToolTip.Tip="Ctrl+Shift+M" IsVisible="{Binding IsReview}"/>
       <Button Classes="flat" BorderBrush="{DynamicResource Brush.FlatButton.FloatingBorder}" Click="OnStageChunk" HotKey="{OnPlatform Ctrl+S, macOS=⌘+S}" IsVisible="{Binding CanStageChunks}" IsEnabled="{Binding CanStageChunks}">
         <TextBlock>
           <Run Text="{DynamicResource Text.Hunk.Stage}"/>
@@ -135,7 +136,7 @@
       </Button>
     </StackPanel>
     <Border x:Name="ReviewEditor" Width="360" HorizontalAlignment="Right" VerticalAlignment="Top"
-            IsVisible="{Binding Review.IsEditing}" Effect="drop-shadow(0 0 8 #80000000)">
+            IsVisible="{Binding Review.IsEditing, FallbackValue=False, TargetNullValue=False}" Effect="drop-shadow(0 0 8 #80000000)">
       <v:ReviewCommentEditor DataContext="{Binding Review}"/>
     </Border>
   </Grid>

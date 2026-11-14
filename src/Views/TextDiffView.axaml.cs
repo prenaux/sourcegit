@@ -721,6 +721,28 @@ namespace SourceGit.Views
         {
         }
 
+        public void AddReviewComment(ViewModels.ReviewCommentTarget target)
+        {
+            if (DataContext is not ViewModels.TextDiffContext { Review: { } review } context)
+                return;
+            var first = TextArea.Caret.Line - 1;
+            var last = first;
+            var selection = TextArea.Selection;
+            if (target == ViewModels.ReviewCommentTarget.Line && !selection.IsEmpty)
+            {
+                first = Math.Min(selection.StartPosition.Line, selection.EndPosition.Line) - 1;
+                last = Math.Max(selection.StartPosition.Line, selection.EndPosition.Line) - 1;
+                var endColumn = selection.StartPosition.Line > selection.EndPosition.Line ? selection.StartPosition.Column : selection.EndPosition.Column;
+                if (last > first && endColumn == 1)
+                    last--;
+            }
+            var chunk = context.CreateReviewSelection(target, GetReviewPane(), first, last);
+            if (chunk == null)
+                return;
+            review.AcceptSelection(context.Data, chunk);
+            this.FindAncestorOfType<TextDiffView>()?.PositionReviewEditor(0);
+        }
+
         private async void OnTextAreaKeyDown(object sender, KeyEventArgs e)
         {
             var primary = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
@@ -1825,6 +1847,20 @@ namespace SourceGit.Views
             ReviewEditor.Margin = new Thickness(0, Math.Max(0, Math.Min(y, Bounds.Height - EditorHeight)), 28, 0);
             ReviewEditor.MaxHeight = Math.Max(0, Bounds.Height - ReviewEditor.Margin.Top);
             Dispatcher.UIThread.Post(() => ReviewEditor.FindDescendantOfType<TextBox>()?.Focus());
+        }
+
+        private void OnAddReviewHunk(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is ViewModels.TextDiffContext { Review: { } review, SelectedChunk: { } selection } context)
+            {
+                var chunk = context.CreateReviewSelection(ViewModels.ReviewCommentTarget.Hunk, ViewModels.ReviewPane.Combined, selection.StartIdx, selection.EndIdx);
+                if (chunk != null)
+                {
+                    review.AcceptSelection(context.Data, chunk);
+                    PositionReviewEditor(selection.Y);
+                }
+            }
+            e.Handled = true;
         }
 
         private void OnAddReviewComment(object sender, RoutedEventArgs e)
