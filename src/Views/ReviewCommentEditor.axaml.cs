@@ -11,6 +11,12 @@ namespace SourceGit.Views
 
         public void FocusEditor() => BodyEditor.TextArea.Focus();
 
+        private void OnLostFocus(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is ViewModels.ReviewDiffContext context)
+                context.DropEmpty();
+        }
+
         public ReviewCommentEditor()
         {
             InitializeComponent();

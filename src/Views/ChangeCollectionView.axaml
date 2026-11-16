@@ -68,9 +68,12 @@
               <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,0,0,0">
                 <TextBlock Text="{Binding ConflictMarker, Mode=OneWay}" Foreground="DarkOrange" FontWeight="Bold" Margin="0,0,4,0" IsVisible="{Binding ShowConflictMarker}"/>
                 <TextBlock Text="{Binding DisplayName, Mode=OneWay}"/>
-                <Path Width="12" Height="12" Margin="6,0,0,0" Fill="DarkOrange" Data="{StaticResource Icons.Fix}" IsVisible="{Binding Change.HasReviewToFix}"/>
-                <TextBlock Margin="2,0,0,0" FontSize="11" Foreground="DarkOrange" Text="{Binding Change.ReviewToFixCount}" IsVisible="{Binding Change.HasReviewToFix}"/>
-                <Path Width="12" Height="12" Margin="6,0,0,0" Fill="Green" Data="{StaticResource Icons.Check}" IsVisible="{Binding Change.IsReviewedWithoutToFix}"/>
+                <StackPanel Classes="review_mark" Orientation="Horizontal" VerticalAlignment="Center"
+                            IsVisible="{Binding Change.HasReviewComments, FallbackValue=False, TargetNullValue=False}">
+                  <Path Width="12" Height="12" Margin="6,0,0,0" Fill="DarkOrange" Data="{StaticResource Icons.Error}" IsVisible="{Binding Change.HasReviewToFix, FallbackValue=False}"/>
+                  <TextBlock Margin="2,0,0,0" FontSize="11" Foreground="DarkOrange" Text="{Binding Change.ReviewToFixCount}" IsVisible="{Binding Change.HasReviewToFix, FallbackValue=False}"/>
+                  <Path Width="12" Height="12" Margin="6,0,0,0" Fill="Green" Data="{StaticResource Icons.Check}" IsVisible="{Binding Change.IsReviewedWithoutToFix, FallbackValue=False}"/>
+                </StackPanel>
               </StackPanel>
             </Grid>
           </DataTemplate>
@@ -99,9 +102,12 @@
               <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="4,0">
                 <TextBlock Text="{Binding ConflictMarker}" Foreground="DarkOrange" FontWeight="Bold" Margin="0,0,4,0" IsVisible="{Binding IsConflicted}"/>
                 <TextBlock Text="{Binding Path, Converter={x:Static c:PathConverters.PureFileName}}"/>
-                <Path Width="12" Height="12" Margin="6,0,0,0" VerticalAlignment="Center" Fill="DarkOrange" Data="{StaticResource Icons.Fix}" IsVisible="{Binding HasReviewToFix}"/>
-                <TextBlock Margin="2,0,0,0" FontSize="11" Foreground="DarkOrange" Text="{Binding ReviewToFixCount}" IsVisible="{Binding HasReviewToFix}"/>
-                <Path Width="12" Height="12" Margin="6,0,0,0" VerticalAlignment="Center" Fill="Green" Data="{StaticResource Icons.Check}" IsVisible="{Binding IsReviewedWithoutToFix}"/>
+                <StackPanel Classes="review_mark" Orientation="Horizontal" VerticalAlignment="Center"
+                            IsVisible="{Binding HasReviewComments, FallbackValue=False, TargetNullValue=False}">
+                  <Path Width="12" Height="12" Margin="6,0,0,0" VerticalAlignment="Center" Fill="DarkOrange" Data="{StaticResource Icons.Error}" IsVisible="{Binding HasReviewToFix, FallbackValue=False}"/>
+                  <TextBlock Margin="2,0,0,0" FontSize="11" Foreground="DarkOrange" Text="{Binding ReviewToFixCount}" IsVisible="{Binding HasReviewToFix, FallbackValue=False}"/>
+                  <Path Width="12" Height="12" Margin="6,0,0,0" VerticalAlignment="Center" Fill="Green" Data="{StaticResource Icons.Check}" IsVisible="{Binding IsReviewedWithoutToFix, FallbackValue=False}"/>
+                </StackPanel>
               </StackPanel>
 
               <TextBlock Grid.Column="2"
@@ -134,9 +140,12 @@
               <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="4,0">
                 <TextBlock Text="{Binding ConflictMarker}" Foreground="DarkOrange" FontWeight="Bold" Margin="0,0,4,0" IsVisible="{Binding IsConflicted}"/>
                 <TextBlock Text="{Binding Path}"/>
-                <Path Width="12" Height="12" Margin="6,0,0,0" VerticalAlignment="Center" Fill="DarkOrange" Data="{StaticResource Icons.Fix}" IsVisible="{Binding HasReviewToFix}"/>
-                <TextBlock Margin="2,0,0,0" FontSize="11" Foreground="DarkOrange" Text="{Binding ReviewToFixCount}" IsVisible="{Binding HasReviewToFix}"/>
-                <Path Width="12" Height="12" Margin="6,0,0,0" VerticalAlignment="Center" Fill="Green" Data="{StaticResource Icons.Check}" IsVisible="{Binding IsReviewedWithoutToFix}"/>
+                <StackPanel Classes="review_mark" Orientation="Horizontal" VerticalAlignment="Center"
+                            IsVisible="{Binding HasReviewComments, FallbackValue=False, TargetNullValue=False}">
+                  <Path Width="12" Height="12" Margin="6,0,0,0" VerticalAlignment="Center" Fill="DarkOrange" Data="{StaticResource Icons.Error}" IsVisible="{Binding HasReviewToFix, FallbackValue=False}"/>
+                  <TextBlock Margin="2,0,0,0" FontSize="11" Foreground="DarkOrange" Text="{Binding ReviewToFixCount}" IsVisible="{Binding HasReviewToFix, FallbackValue=False}"/>
+                  <Path Width="12" Height="12" Margin="6,0,0,0" VerticalAlignment="Center" Fill="Green" Data="{StaticResource Icons.Check}" IsVisible="{Binding IsReviewedWithoutToFix, FallbackValue=False}"/>
+                </StackPanel>
               </StackPanel>
             </Grid>
           </DataTemplate>

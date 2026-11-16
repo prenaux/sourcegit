@@ -61,9 +61,10 @@ namespace SourceGit.ViewModels
         {
             if (file.OldPath.Length > 0 && file.OldPath != file.Path)
                 return Models.ChangeState.Renamed;
-            if (file.IsUntracked)
+            var patch = file.Patch;
+            if (file.IsUntracked || (patch.Contains("new file mode", StringComparison.Ordinal) && patch.Contains("--- /dev/null", StringComparison.Ordinal)))
                 return Models.ChangeState.Added;
-            if (file.IsLoaded && file.IsBinary == false && file.OldContent.Length > 0 && file.NewContent.Length == 0)
+            if (patch.Contains("deleted file mode", StringComparison.Ordinal) || patch.Contains("+++ /dev/null", StringComparison.Ordinal))
                 return Models.ChangeState.Deleted;
             return Models.ChangeState.Modified;
         }
@@ -120,6 +121,7 @@ namespace SourceGit.ViewModels
             _hoveredComment != null ? "Reviews.EditComment" : _hasSelection ? "Reviews.CommentSelection" : "Reviews.AddComment");
         public Models.ReviewComment SelectedComment => _comment;
         public string AttachmentLabel => _comment == null ? string.Empty : App.Text("Reviews.Attachment." + _comment.Anchor.Attachment);
+        public bool ShowAnchorLabel => !_fileCommentsOnly;
         public string AnchorLabel => _comment != null && _comment.Anchor.Attachment != Models.ReviewAttachment.Attached ?
             App.Text("Reviews.OriginalLocation", FormatAnchorLabel(_comment.OriginAnchor)) : FormatAnchorLabel(ActiveAnchor);
 
@@ -197,8 +199,40 @@ namespace SourceGit.ViewModels
 
         public void BeginComment(Models.ReviewAnchor anchor)
         {
-            if (_comment != null && string.IsNullOrWhiteSpace(_comment.Body))
-                _owner.RemoveComment(_file, _comment);
+            BeginComment(anchor, true);
+        }
+
+        public void EditComment(Models.ReviewComment comment)
+        {
+            EditComment(comment, true);
+        }
+
+        public void DropEmpty()
+        {
+            if (_comment == null)
+            {
+                if (_draft == null)
+                    return;
+                _draft = null;
+                Refresh();
+                return;
+            }
+            if (!string.IsNullOrWhiteSpace(_comment.Body))
+                return;
+            _owner.RemoveComment(_file, _comment);
+            _comment = null;
+            _draft = null;
+            Refresh();
+        }
+
+        public void NotifySelectionMoved(TextDiffSelectedChunk chunk, bool hasSelection)
+        {
+            _owner.SyncCommentTarget(this, chunk, hasSelection);
+        }
+
+        private void BeginComment(Models.ReviewAnchor anchor, bool activate)
+        {
+            DropEmptyComment();
             _comment = null;
             _draft = anchor;
             _body = string.Empty;
@@ -206,23 +240,35 @@ namespace SourceGit.ViewModels
             if (!_fileCommentsOnly)
                 _owner.SelectComment(null);
             Refresh();
-            EditorOpened?.Invoke(this, EventArgs.Empty);
-            _owner.NotifyEditorOpened(this);
-        }
-
-        public void EditComment(Models.ReviewComment comment)
-        {
-            if (_fileCommentsOnly && comment != null && comment.Anchor.Side != Models.ReviewSide.File)
-                return;
-            _comment = comment;
-            _draft = null;
-            _owner.SelectComment(comment);
-            Refresh();
-            if (comment != null)
+            if (activate)
             {
                 EditorOpened?.Invoke(this, EventArgs.Empty);
                 _owner.NotifyEditorOpened(this);
             }
+        }
+
+        private void EditComment(Models.ReviewComment comment, bool activate)
+        {
+            if (_fileCommentsOnly && comment != null && comment.Anchor.Side != Models.ReviewSide.File)
+                return;
+            DropEmptyComment();
+            _comment = comment;
+            _draft = null;
+            _owner.SelectComment(comment);
+            Refresh();
+            if (activate && comment != null)
+            {
+                EditorOpened?.Invoke(this, EventArgs.Empty);
+                _owner.NotifyEditorOpened(this);
+            }
+        }
+
+        private void DropEmptyComment()
+        {
+            if (_comment == null || !string.IsNullOrWhiteSpace(_comment.Body))
+                return;
+            _owner.RemoveComment(_file, _comment);
+            _comment = null;
         }
 
         public void CloseEditor()
@@ -274,6 +320,16 @@ namespace SourceGit.ViewModels
 
         public void OpenComment(Models.TextDiff data, TextDiffSelectedChunk chunk, bool hasSelection)
         {
+            OpenComment(data, chunk, hasSelection, true);
+        }
+
+        public void TrackComment(Models.TextDiff data, TextDiffSelectedChunk chunk, bool hasSelection)
+        {
+            OpenComment(data, chunk, hasSelection, false);
+        }
+
+        private void OpenComment(Models.TextDiff data, TextDiffSelectedChunk chunk, bool hasSelection, bool activate)
+        {
             if (_fileCommentsOnly)
                 return;
             if (!hasSelection && !_owner.HasPendingReattach && chunk.StartIdx == chunk.EndIdx && chunk.StartIdx >= 0 && chunk.StartIdx < data.Lines.Count)
@@ -282,14 +338,19 @@ namespace SourceGit.ViewModels
                 var existing = FindComment(data.Lines[chunk.StartIdx], pane);
                 if (existing != null)
                 {
-                    EditComment(existing);
+                    EditComment(existing, activate);
                     return;
                 }
             }
-            AcceptSelection(data, chunk);
+            AcceptSelection(data, chunk, activate);
         }
 
         public void AcceptSelection(Models.TextDiff data, TextDiffSelectedChunk chunk)
+        {
+            AcceptSelection(data, chunk, true);
+        }
+
+        private void AcceptSelection(Models.TextDiff data, TextDiffSelectedChunk chunk, bool activate)
         {
             var oldStart = int.MaxValue;
             var newStart = int.MaxValue;
@@ -344,11 +405,11 @@ namespace SourceGit.ViewModels
             if (_owner.HasPendingReattach)
             {
                 var comment = _owner.ReattachComment(_file, anchor);
-                EditComment(comment);
+                EditComment(comment, activate);
             }
             else
             {
-                BeginComment(anchor);
+                BeginComment(anchor, activate);
             }
         }
 

@@ -231,7 +231,7 @@ namespace SourceGit.Views
             };
             menu.Items.Add(copyPatch);
 
-            if (files.Count == 1 && model.CanActOnWorkingFile(files[0]))
+            if (files.Count == 1)
             {
                 var fullPath = model.GetFullPath(files[0].Path);
                 menu.Items.Add(new MenuItem { Header = "-" });

@@ -705,7 +705,7 @@ namespace SourceGit.Views
 
         private void OnReviewChanged(object sender, PropertyChangedEventArgs e)
         {
-            TextArea.TextView.Redraw();
+            TextArea.TextView.InvalidateVisual();
             foreach (var margin in TextArea.LeftMargins)
                 margin.InvalidateVisual();
         }
@@ -763,14 +763,43 @@ namespace SourceGit.Views
             UpdateReviewSelectionChunk();
         }
 
-        private void UpdateReviewSelectionChunk()
+        private void UpdateReviewSelectionChunk(bool notifyTarget = true)
         {
             var view = TextArea.TextView;
-            if (!view.VisualLinesValid || view.VisualLines.Count == 0)
+            if (view.VisualLinesValid && view.VisualLines.Count > 0)
+            {
+                var line = view.GetVisualLine(TextArea.Caret.Line);
+                var y = line == null ? view.VerticalOffset : line.GetTextLineVisualYPosition(line.TextLines[0], VisualYPosition.LineTop);
+                UpdateSelectedChunk(y);
+            }
+            if (!notifyTarget || _reviewContext == null)
                 return;
-            var line = view.GetVisualLine(TextArea.Caret.Line);
-            var y = line == null ? view.VerticalOffset : line.GetTextLineVisualYPosition(line.TextLines[0], VisualYPosition.LineTop);
-            UpdateSelectedChunk(y);
+            var target = CreateCaretReviewChunk();
+            if (target != null)
+                _reviewContext.NotifySelectionMoved(target, !TextArea.Selection.IsEmpty);
+        }
+
+        private ViewModels.TextDiffSelectedChunk CreateCaretReviewChunk()
+        {
+            if (DataContext is not ViewModels.TextDiffContext context || context.Data.Lines.Count == 0)
+                return null;
+            var selection = TextArea.Selection;
+            int first;
+            int last;
+            if (selection.IsEmpty)
+            {
+                first = TextArea.Caret.Line - 1;
+                last = first;
+            }
+            else
+            {
+                first = Math.Min(selection.StartPosition.Line, selection.EndPosition.Line) - 1;
+                last = Math.Max(selection.StartPosition.Line, selection.EndPosition.Line) - 1;
+                var endColumn = selection.StartPosition.Line > selection.EndPosition.Line ? selection.StartPosition.Column : selection.EndPosition.Column;
+                if (last > first && endColumn == 1)
+                    last--;
+            }
+            return context.CreateReviewSelection(GetReviewPane(), first, last);
         }
 
         private async void OnTextAreaKeyDown(object sender, KeyEventArgs e)
@@ -799,6 +828,8 @@ namespace SourceGit.Views
         private void OnTextAreaCaretPositionChanged(object sender, EventArgs e)
         {
             BlockNavigation.UpdateByCaretPosition(TextArea?.Caret?.Line ?? 0);
+            if (_reviewContext != null)
+                UpdateReviewSelectionChunk();
         }
 
         private void OnTextViewContextRequested(object sender, ContextRequestedEventArgs e)
@@ -990,8 +1021,8 @@ namespace SourceGit.Views
             }
 
             ctx.DisplayRange = new ViewModels.TextLineRange(start, start + count);
-            if (ctx.IsReview && !TextArea.Selection.IsEmpty)
-                UpdateReviewSelectionChunk();
+            if (ctx.IsReview)
+                UpdateReviewSelectionChunk(false);
         }
 
         protected void TrimReviewSelectionEnd(ref int start, ref int end)
@@ -1080,7 +1111,7 @@ namespace SourceGit.Views
                     _textMate = null;
                     GC.Collect();
 
-                    TextArea.TextView.Redraw();
+                    TextArea.TextView.InvalidateVisual();
                 }
             }
         }

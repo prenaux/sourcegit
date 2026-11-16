@@ -88,6 +88,10 @@ namespace SourceGit.ReviewTests
                 (nameof(ReuseTheSingleFileComment), ReuseTheSingleFileComment),
                 (nameof(ShowDiffStatsForTheSelectedFile), ShowDiffStatsForTheSelectedFile),
                 (nameof(ExportOnlyLoadedPatches), ExportOnlyLoadedPatches),
+                (nameof(DeriveFileStateFromPatch), DeriveFileStateFromPatch),
+                (nameof(HideReviewMarksOnFoldersAndPlainFiles), HideReviewMarksOnFoldersAndPlainFiles),
+                (nameof(KeepVisualLinesValidWhenReviewStateChanges), KeepVisualLinesValidWhenReviewStateChanges),
+                (nameof(KeepFileActionsInTheMenuForRecordedSources), KeepFileActionsInTheMenuForRecordedSources),
                 (nameof(SwitchTabsForCommentTargets), SwitchTabsForCommentTargets),
                 (nameof(ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff), ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff),
                 (nameof(ReopenHistoryReviewWithUncommentedSections), ReopenHistoryReviewWithUncommentedSections),
@@ -989,15 +993,23 @@ namespace SourceGit.ReviewTests
                 presenter.TextArea.Selection = AvaloniaEdit.Editing.Selection.Create(presenter.TextArea,
                     presenter.Document.GetLineByNumber(12).Offset, presenter.Document.GetLineByNumber(13).Offset);
                 PumpLayout(window);
-                Check(page.Context.IsEditing && page.Context.Body == finding,
-                    "Changing the diff selection must not close or retarget a nonempty comment.");
-                presenter.ScrollToLine(160);
+                Check(page.Context.Body.Length == 0 && page.Comments.Single().Body == finding,
+                    "Moving the caret must retarget the Comment tab and keep the saved finding.");
+                presenter.TextArea.ClearSelection();
+                presenter.CaretOffset = presenter.Document.GetLineByNumber(11).Offset;
                 PumpLayout(window);
-                Check(page.Context.IsEditing && page.Context.Body == finding,
-                    "Scrolling the commented range out of view must not close the docked editor.");
-                page.Context.CloseEditor();
-                Check(!page.Context.IsEditing && page.Comments.Single().Body == finding,
-                    "Closing the docked editor must keep the saved finding.");
+                Check(page.Context.Body == finding,
+                    "Returning the caret to the commented lines must show that finding again.");
+                var scroller = presenter.FindDescendantOfType<ScrollViewer>();
+                scroller.Offset = new Vector(scroller.Offset.X, presenter.TextArea.TextView.DefaultLineHeight * 50);
+                PumpLayout(window);
+                Check(page.Context.Body == finding,
+                    "Scrolling the commented range out of view must not change the Comment tab.");
+                page.Context.Body = string.Empty;
+                presenter.CaretOffset = presenter.Document.GetLineByNumber(14).Offset;
+                PumpLayout(window);
+                Check(page.Comments.Count == 0 && !page.CurrentSnapshot.Files[0].HasReviewWork,
+                    "An emptied comment must be removed when the comment target changes.");
             }
             finally
             {
@@ -1286,6 +1298,8 @@ namespace SourceGit.ReviewTests
             page.OpenPreview(CreateSnapshot("a\nb\n"));
             page.OpenFileComment();
             Check(page.ActiveTabIndex == 1 && page.FileContext.IsEditing, "Edit file comment must open the File comment tab.");
+            Check(!page.FileContext.ShowAnchorLabel && page.Context.ShowAnchorLabel,
+                "The File comment tab must not repeat the whole-file anchor label.");
             page.FileContext.Body = "first comment";
             page.FileContext.CloseEditor();
             page.OpenFileComment();
@@ -1323,6 +1337,119 @@ namespace SourceGit.ReviewTests
             var patch = page.GetSelectedPatchText();
             Check(patch.StartsWith("diff --git", StringComparison.Ordinal) && patch.Contains("+a", StringComparison.Ordinal),
                 "Patch export must use the file's complete patch, not its comment context.");
+        }
+
+        private static void DeriveFileStateFromPatch()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\n");
+            snapshot.Files.Add(new ReviewFile
+            {
+                Path = "deleted.txt",
+                Patch = "diff --git a/deleted.txt b/deleted.txt\ndeleted file mode 100644\n--- a/deleted.txt\n+++ /dev/null\n@@ -1 +0,0 @@\n-old\n",
+            });
+            snapshot.Files.Add(new ReviewFile
+            {
+                Path = "renamed_new.txt",
+                OldPath = "renamed_old.txt",
+                Patch = "diff --git a/renamed_old.txt b/renamed_new.txt\nsimilarity index 100%\nrename from renamed_old.txt\nrename to renamed_new.txt\n",
+            });
+            snapshot.Files.Add(new ReviewFile
+            {
+                Path = "modified.txt",
+                Patch = "diff --git a/modified.txt b/modified.txt\nindex 1111111..2222222 100644\n--- a/modified.txt\n+++ b/modified.txt\n@@ -1 +1 @@\n-old\n+new\n",
+            });
+            page.OpenPreview(snapshot);
+            Check(page.Files.Single(x => x.Path == "file.txt").Change.Index == ChangeState.Added,
+                "A new file patch must show the added state before the file is loaded.");
+            Check(page.Files.Single(x => x.Path == "deleted.txt").Change.Index == ChangeState.Deleted,
+                "A deleted file patch must show the deleted state instead of a regular modification.");
+            Check(page.Files.Single(x => x.Path == "renamed_new.txt").Change.Index == ChangeState.Renamed,
+                "A changed old path must show the renamed state.");
+            Check(page.Files.Single(x => x.Path == "modified.txt").Change.Index == ChangeState.Modified,
+                "A regular patch must show the modified state.");
+        }
+
+        private static void HideReviewMarksOnFoldersAndPlainFiles()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\n");
+            snapshot.Files[0].Path = "src/alpha.txt";
+            snapshot.Files[0].Comments.Add(CreateComment(snapshot, 1));
+            snapshot.Files.Add(new ReviewFile { Path = "src/beta.txt" });
+            page.OpenPreview(snapshot);
+            var window = OpenReviewWindow(page);
+            try
+            {
+                var view = (SourceGit.Views.Reviews)window.Content;
+                var tree = view.FindControl<SourceGit.Views.ChangeCollectionView>("FileList");
+                var folderMarks = tree.GetVisualDescendants()
+                    .OfType<StackPanel>()
+                    .Where(x => x.Classes.Contains("review_mark") &&
+                        x.FindAncestorOfType<ListBoxItem>()?.DataContext is ViewModels.ChangeTreeNode { IsFolder: true })
+                    .ToList();
+                Check(folderMarks.Count > 0 && folderMarks.All(x => !x.IsVisible),
+                    "Folder rows must never show a review mark.");
+                page.ViewMode = ChangeViewMode.List;
+                PumpLayout(window);
+                var marks = tree.GetVisualDescendants()
+                    .OfType<StackPanel>()
+                    .Where(x => x.Classes.Contains("review_mark"))
+                    .ToList();
+                Check(marks.Count(x => x.IsVisible) == 1,
+                    "Only the file with comments must show a review mark.");
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+
+        private static void KeepVisualLinesValidWhenReviewStateChanges()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\nc\n");
+            snapshot.Files[0].Comments.Add(CreateComment(snapshot, 2));
+            page.OpenPreview(snapshot);
+            var window = OpenReviewWindow(page);
+            try
+            {
+                var view = (SourceGit.Views.Reviews)window.Content;
+                var presenter = view.GetVisualDescendants().OfType<SourceGit.Views.ThemedTextDiffPresenter>().First();
+                PumpLayout(window);
+                Check(presenter.TextArea.TextView.VisualLinesValid, "The diff must be laid out before the state check.");
+                page.SelectedComment = page.Comments.First();
+                PumpLayout(window);
+                page.Context.Refresh();
+                Check(presenter.TextArea.TextView.VisualLinesValid,
+                    "Review state changes must not invalidate diff visual lines, which crashes AvaloniaEdit pointer handling.");
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+
+        private static void KeepFileActionsInTheMenuForRecordedSources()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\n");
+            snapshot.Source = ReviewSourceKind.Commit;
+            page.OpenPreview(snapshot);
+            var window = OpenReviewWindow(page);
+            try
+            {
+                var view = (SourceGit.Views.Reviews)window.Content;
+                var menu = view.CreateFileContextMenu(page, view.FindControl<SourceGit.Views.ChangeCollectionView>("FileList"));
+                var headers = menu.Items.OfType<MenuItem>().Select(x => x.Header?.ToString()).ToList();
+                Check(headers.Contains(App.Text("Open")) && headers.Contains(App.Text("RevealFile")) &&
+                    headers.Contains(App.Text("FileHistory")) && headers.Contains(App.Text("Blame") + " (HEAD-only)"),
+                    "Recorded commit reviews must keep the standard file actions, including custom actions.");
+            }
+            finally
+            {
+                window.Close();
+            }
         }
 
         private static void SwitchTabsForCommentTargets()

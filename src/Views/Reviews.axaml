@@ -31,7 +31,7 @@
     </Grid>
 
     <Grid Grid.Row="2" ColumnDefinitions="260,4,*" IsEnabled="{Binding !IsBusy}">
-      <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto,Auto" Margin="0,0,4,0">
+      <Grid Grid.Column="0" RowDefinitions="Auto,*,4,*" Margin="0,0,4,0">
         <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,4">
           <TextBox Text="{Binding FileFilter, Mode=TwoWay}" Watermark="{DynamicResource Text.Reviews.FilterFiles}"/>
           <Grid ColumnDefinitions="*,Auto">
@@ -53,37 +53,31 @@
                                 ExpansionState="{Binding ExpansionState}"
                                 EnableCompactFolders="{Binding Source={x:Static vm:Preferences.Instance}, Path=EnableCompactFoldersInChangesTree}"
                                 ContextRequested="OnFilesContextRequested"/>
-        <ToggleButton Grid.Row="2" Classes="icon_button" Height="24" Padding="4,0" Margin="0,4,0,0"
-                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                      IsChecked="{Binding IsCommentsExpanded, Mode=TwoWay}">
-          <StackPanel Orientation="Horizontal" Spacing="6">
-            <Grid Width="10" Height="10">
-              <Path Data="{StaticResource Icons.Up}" IsVisible="{Binding IsCommentsExpanded}"/>
-              <Path Data="{StaticResource Icons.Down}" IsVisible="{Binding !IsCommentsExpanded}"/>
-            </Grid>
-            <TextBlock Text="{Binding CommentsHeader}"/>
-          </StackPanel>
-        </ToggleButton>
-        <ListBox x:Name="CommentList" Grid.Row="3" Height="160" Margin="0,4,0,0" KeyDown="OnCommentsKeyDown"
-                 IsVisible="{Binding IsCommentsExpanded}"
-                 ItemsSource="{Binding Comments}" SelectedItem="{Binding SelectedComment, Mode=TwoWay}" Background="{DynamicResource Brush.Contents}">
-          <ListBox.Styles>
-            <Style Selector="ListBoxItem">
-              <Setter Property="MinHeight" Value="72"/>
-              <Setter Property="Padding" Value="4"/>
-            </Style>
-          </ListBox.Styles>
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:ReviewCommentItem">
-              <StackPanel Spacing="2">
-                <TextBlock Text="{Binding Body}" TextWrapping="Wrap" MaxHeight="38"/>
-                <TextBlock Text="{Binding State}" FontSize="11"/>
-                <TextBlock Text="{Binding Attachment}" FontSize="11" Foreground="{DynamicResource Brush.FG2}"/>
-                <TextBlock Text="{Binding Location}" FontSize="11" Foreground="{DynamicResource Brush.FG2}"/>
-              </StackPanel>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
+        <GridSplitter Grid.Row="2" MinHeight="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      Background="{DynamicResource Brush.Border0}" Focusable="False"/>
+        <Grid Grid.Row="3" RowDefinitions="Auto,*">
+          <TextBlock Grid.Row="0" Text="{Binding CommentsHeader}" FontWeight="Bold" Margin="0,4,0,4"/>
+          <ListBox x:Name="CommentList" Grid.Row="1" KeyDown="OnCommentsKeyDown"
+                   ItemsSource="{Binding Comments}" SelectedItem="{Binding SelectedComment, Mode=TwoWay}"
+                   Background="{DynamicResource Brush.Contents}">
+            <ListBox.Styles>
+              <Style Selector="ListBoxItem">
+                <Setter Property="MinHeight" Value="72"/>
+                <Setter Property="Padding" Value="4"/>
+              </Style>
+            </ListBox.Styles>
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ReviewCommentItem">
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{Binding Body}" TextWrapping="Wrap" MaxHeight="38"/>
+                  <TextBlock Text="{Binding State}" FontSize="11"/>
+                  <TextBlock Text="{Binding Attachment}" FontSize="11" Foreground="{DynamicResource Brush.FG2}"/>
+                  <TextBlock Text="{Binding Location}" FontSize="11" Foreground="{DynamicResource Brush.FG2}"/>
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
       </Grid>
       <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="Transparent"/>
       <Grid Grid.Column="2" RowDefinitions="Auto,Auto,Auto,*,Auto">
@@ -141,13 +135,15 @@
             <v:ReviewCommentEditor x:Name="FileCommentEditor" DataContext="{Binding FileContext}" Margin="0,4,0,0"/>
           </TabItem>
           <TabItem Header="{DynamicResource Text.Reviews.Tab.General}">
-            <v:CommitMessageTextEditor x:Name="GeneralReviewEditor" CommitMessage="{Binding GeneralReviewMessage, Mode=TwoWay}"
-                                       HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                                       Placeholder="{DynamicResource Text.Reviews.GeneralPlaceholder}"
-                                       SubjectLineBrush="{DynamicResource Brush.Border2}"
-                                       SubjectGuideLength="{Binding Source={x:Static vm:Preferences.Instance}, Path=SubjectGuideLength}"
-                                       Foreground="{DynamicResource Brush.FG1}" FontFamily="{DynamicResource Fonts.Default}"
-                                       FontSize="{Binding Source={x:Static vm:Preferences.Instance}, Path=EditorFontSize}"/>
+            <Border Background="{DynamicResource Brush.Contents}" BorderThickness="1" BorderBrush="{DynamicResource Brush.Border2}" CornerRadius="4">
+              <v:CommitMessageTextEditor x:Name="GeneralReviewEditor" CommitMessage="{Binding GeneralReviewMessage, Mode=TwoWay}"
+                                         HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                         Placeholder="{DynamicResource Text.Reviews.GeneralPlaceholder}"
+                                         SubjectLineBrush="{DynamicResource Brush.Border2}"
+                                         SubjectGuideLength="{Binding Source={x:Static vm:Preferences.Instance}, Path=SubjectGuideLength}"
+                                         Foreground="{DynamicResource Brush.FG1}" FontFamily="{DynamicResource Fonts.Default}"
+                                         FontSize="{Binding Source={x:Static vm:Preferences.Instance}, Path=EditorFontSize}"/>
+            </Border>
           </TabItem>
         </TabControl>
       </Grid>

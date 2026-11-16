@@ -20,12 +20,15 @@ another source-creation form. Without saved work, it shows an empty state and
 does not automatically start a local source.
 
 The file list is the same change tree used by Local changes, with Tree, Grid,
-and List modes and remembered folder expansion. The text filter matches
-repository-relative paths and combines with All files, Reviewed, and Unreviewed.
-Each file row shows one review mark after its name: a fix glyph and the open
-count when the file has tofix findings, a check glyph when it has comments and
-no tofix findings, and no mark when it has no comments. Folders do not aggregate
-their children's marks.
+and List modes, a remembered view mode, and remembered folder expansion. The
+text filter matches repository-relative paths and combines with All files,
+Reviewed, and Unreviewed. The list status icon follows the captured patch, so a
+deleted file shows the deleted icon and an added file shows the added icon
+before its content loads. Each file row shows one review mark after its name: a
+warning glyph and the open count when the file has tofix findings, a check glyph
+when it has comments and no tofix findings, and no mark when it has no comments.
+Folder rows never show a review mark, and folders do not aggregate their
+children's marks.
 
 The file tree loads paths and status before file contents. Selecting a file
 loads its diff asynchronously. Selecting another file cancels obsolete loading.
@@ -43,10 +46,10 @@ diff header also shows the selected file's added and deleted line counts. The
 selected file's absolute path is selectable above the diff.
 
 The Reviewed filter means at least one nonempty comment, including fixed or
-dismissed comments. Unreviewed means no nonempty comments. The selected file
-stays visible while its comment panel is active; membership updates when the
-editor closes, so adding a first comment or removing the last comment does not
-interrupt typing.
+dismissed comments. Unreviewed means no nonempty comments. The file tree and the
+comments list share the left column with a horizontal splitter, and both panes
+scroll independently. The comments list header shows the selected file's comment
+count.
 
 A comment records the selected file's identity. Code already associated with
 review work does not reload silently. Update snapshot
@@ -61,9 +64,18 @@ code or attaching them to unverified lines.
 ## Write the review
 
 Editing happens in one docked panel below the diff with three tabs: Comment,
-File comment, and General review. There is no floating editor. Opening a comment
-selects its tab and focuses its editor. Escape returns focus to the diff, so the
-whole review is reachable from the keyboard.
+File comment, and General review. There is no floating editor and no close
+button. All three tabs use the same framed editor as the commit message box.
+Escape returns focus to the diff, so the whole review is reachable from the
+keyboard.
+
+The Comment tab follows the diff caret and selection. It shows the finding under
+the caret, or an empty editor targeting the selected lines or current line.
+Moving the caret retargets the tab; every keystroke is already saved, so nothing
+is lost. Ctrl+M or the Comment action gives that tab focus. An empty or
+whitespace body removes its finding when the target changes or the editor loses
+focus. The File comment tab edits the single file-level comment and omits the
+redundant whole-file anchor label.
 
 General review uses the commit-message editor. Its first line is the review
 subject; a blank line separates the subject from the body. Commit and comparison
@@ -72,12 +84,10 @@ revision and date information.
 
 Comment records the current line when no text is selected. Comment on selection
 records the selected source range with surrounding context. Hovering a commented
-line offers Edit comment instead of creating another finding. Changing the diff
-selection does not close or retarget a tab while its text is nonempty; it only
-follows the selection while the tab is empty. General review text and comments
-use the same editor as commit messages. Comments omit commit-subject
-decorations. Typing preserves text, blank lines, and caret state. Closing an
-empty or whitespace-only comment removes it.
+line offers Edit comment instead of creating another finding. General review
+text and comments use the same editor as commit messages. Comments omit
+commit-subject decorations. Typing preserves text, blank lines, and caret state.
+Closing an empty or whitespace-only comment removes it.
 
 Comment states are fixed:
 
@@ -109,10 +119,9 @@ Save as Patch and Copy as Patch use the selected files' complete patches. They
 are available only when every selected file has loaded full source, so a
 recorded-context-only file is never exported as a patch that would not apply.
 
-Open, Reveal, File History, Blame, and custom file actions are available only for
-local staged, unstaged, or all-local sources whose current file still matches
-the recorded code. Commit and comparison reviews act on recorded revisions, so
-they do not offer actions that would read or modify a working file. Staging,
+Open, Reveal, File History, Blame, and custom file actions are available for
+single-file selections in every review source, because they act on the working
+file path. Open and Reveal stay disabled when the working file is absent. Staging,
 discarding, and stashing are never offered inside Reviews.
 
 Copy Path copies the repository-relative path and Copy Full Path copies the
@@ -140,7 +149,7 @@ Review shortcuts are active only inside Reviews:
 The comment shortcut also accepts Command on macOS. Boundary navigation does not
 intercept normal text navigation inside a comment or general-review editor.
 
-The comments list sits below the file tree and is collapsed by default. Its
+The comments list sits below the file tree behind a horizontal splitter. Its
 header shows the selected file's comment count. A mixed target displays both old
 and new source ranges.
 

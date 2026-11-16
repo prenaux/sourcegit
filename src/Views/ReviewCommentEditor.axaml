@@ -5,33 +5,38 @@
              xmlns:c="using:SourceGit.Converters"
              xmlns:v="using:SourceGit.Views"
              x:Class="SourceGit.Views.ReviewCommentEditor"
-             x:DataType="vm:ReviewDiffContext">
-  <Border Background="{DynamicResource Brush.Contents}" BorderBrush="{DynamicResource Brush.Border2}" BorderThickness="1" CornerRadius="4" Padding="8">
-    <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="6">
-      <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8">
-        <TextBlock Text="{Binding AnchorLabel}" FontWeight="Bold"/>
-        <TextBlock Text="{Binding AttachmentLabel}" Foreground="{DynamicResource Brush.FG2}"/>
-      </StackPanel>
-      <ComboBox Grid.Row="1" ItemsSource="{Binding StateChoices}" SelectedItem="{Binding State, Mode=TwoWay}" HorizontalAlignment="Stretch">
-        <ComboBox.ItemTemplate>
-          <DataTemplate x:DataType="m:ReviewCommentState">
-            <TextBlock Text="{Binding Converter={x:Static c:ReviewConverters.ToStateLabel}}"/>
-          </DataTemplate>
-        </ComboBox.ItemTemplate>
-      </ComboBox>
-      <Border Grid.Row="2" BorderBrush="{DynamicResource Brush.Border2}" BorderThickness="1" Background="{DynamicResource Brush.Contents}">
-        <v:CommitMessageTextEditor x:Name="BodyEditor" CommitMessage="{Binding Body, Mode=TwoWay}"
-                                   ShowSubjectGuide="False"
-                                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                                   Foreground="{DynamicResource Brush.FG1}" FontFamily="{DynamicResource Fonts.Default}"
-                                   FontSize="{Binding Source={x:Static vm:Preferences.Instance}, Path=EditorFontSize}"
-                                   Placeholder="{DynamicResource Text.Reviews.CommentPlaceholder}"/>
-      </Border>
-      <WrapPanel Grid.Row="3" Orientation="Horizontal">
-        <Button Margin="0,0,6,0" Content="{DynamicResource Text.Reviews.Reattach}" Command="{Binding BeginReattach}" IsVisible="{Binding CanReattach}"/>
-        <Button Margin="0,0,6,0" Content="{DynamicResource Text.Reviews.OpenOriginal}" Command="{Binding OpenOriginal}" IsVisible="{Binding CanOpenOriginal}"/>
-        <Button Content="{DynamicResource Text.Reviews.CloseComment}" Command="{Binding CloseEditor}"/>
-      </WrapPanel>
+             x:DataType="vm:ReviewDiffContext"
+             LostFocus="OnLostFocus">
+  <Border Background="{DynamicResource Brush.Contents}" BorderThickness="1" BorderBrush="{DynamicResource Brush.Border2}" CornerRadius="4">
+    <Grid RowDefinitions="*,1,Auto">
+      <v:CommitMessageTextEditor Grid.Row="0" x:Name="BodyEditor"
+                                 CommitMessage="{Binding Body, Mode=TwoWay}"
+                                 ShowSubjectGuide="False"
+                                 Placeholder="{DynamicResource Text.Reviews.CommentPlaceholder}"
+                                 Foreground="{DynamicResource Brush.FG1}"
+                                 FontFamily="{DynamicResource Fonts.Default}"
+                                 FontSize="{Binding Source={x:Static vm:Preferences.Instance}, Path=EditorFontSize}"/>
+      <Rectangle Grid.Row="1" Height="1" HorizontalAlignment="Stretch" VerticalAlignment="Center" IsHitTestVisible="False" Fill="{DynamicResource Brush.Border2}"/>
+      <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Background="{DynamicResource Brush.Window}">
+        <ComboBox Grid.Column="0" Width="128" Margin="4,2" ItemsSource="{Binding StateChoices}" SelectedItem="{Binding State, Mode=TwoWay}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="m:ReviewCommentState">
+              <TextBlock Text="{Binding Converter={x:Static c:ReviewConverters.ToStateLabel}}"/>
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="4,0">
+          <TextBlock Text="{Binding AnchorLabel}" IsVisible="{Binding ShowAnchorLabel}" TextTrimming="CharacterEllipsis"/>
+          <TextBlock Text="{Binding AttachmentLabel}" Foreground="{DynamicResource Brush.FG2}"
+                     IsVisible="{Binding AttachmentLabel, Converter={x:Static c:StringConverters.IsNotNullOrWhitespace}}"/>
+        </StackPanel>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,0">
+          <Button Classes="flat" Height="22" Padding="6,0" Margin="4,0,0,0"
+                  Content="{DynamicResource Text.Reviews.Reattach}" Command="{Binding BeginReattach}" IsVisible="{Binding CanReattach}"/>
+          <Button Classes="flat" Height="22" Padding="6,0" Margin="4,0,0,0"
+                  Content="{DynamicResource Text.Reviews.OpenOriginal}" Command="{Binding OpenOriginal}" IsVisible="{Binding CanOpenOriginal}"/>
+        </StackPanel>
+      </Grid>
     </Grid>
   </Border>
 </UserControl>

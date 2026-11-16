@@ -35,6 +35,7 @@ namespace SourceGit
                 LogException(e.ExceptionObject as Exception);
             };
 
+
             TaskScheduler.UnobservedTaskException += (_, e) =>
             {
                 e.SetObserved();
@@ -400,6 +401,13 @@ namespace SourceGit
         }
         #endregion
 
+        private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+        {
+            LogException(e.Exception);
+            if (e.Exception is AvaloniaEdit.Rendering.VisualLinesInvalidException)
+                e.Handled = true;
+        }
+
         #region Overrides
         public override void Initialize()
         {
@@ -415,6 +423,8 @@ namespace SourceGit
 
         public override void OnFrameworkInitializationCompleted()
         {
+            Dispatcher.UIThread.UnhandledException += OnDispatcherUnhandledException;
+
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
                 BindingPlugins.DataValidators.RemoveAt(0);

@@ -34,6 +34,7 @@ namespace SourceGit.ViewModels
         private ReviewDiffContext _context;
         private ReviewDiffContext _fileContext;
         private TextDiffContext _diff;
+        private TextDiffSelectedChunk _lastTrackedChunk;
         private Models.ReviewComment _reattach;
         private string _fileFilter = string.Empty;
         private string _status = string.Empty;
@@ -45,7 +46,6 @@ namespace SourceGit.ViewModels
         private bool _initialized;
         private bool _isCheckingSource;
         private bool _disposed;
-        private bool _commentsExpanded;
         private int _activeTab;
         private Models.ChangeViewMode _viewMode = Models.ChangeViewMode.Tree;
         private CancellationTokenSource _fileLoadCancellation;
@@ -94,19 +94,6 @@ namespace SourceGit.ViewModels
                     CommentTargetRequested?.Invoke(this, EventArgs.Empty);
             }
         }
-        public bool IsCommentsExpanded
-        {
-            get => _uiStates?.ReviewCommentsExpanded ?? _commentsExpanded;
-            set
-            {
-                if (IsCommentsExpanded == value)
-                    return;
-                _commentsExpanded = value;
-                if (_uiStates != null)
-                    _uiStates.ReviewCommentsExpanded = value;
-                OnPropertyChanged();
-            }
-        }
 
         public Models.ChangeViewMode ViewMode
         {
@@ -144,16 +131,8 @@ namespace SourceGit.ViewModels
         public bool CanExportPatch => SelectedFileItems.Count > 0 && SelectedFileItems.TrueForAll(x =>
             x.SourceFile != null && x.SourceFile.IsLoaded && !x.IsRecordedContext && x.SourceFile.Patch.Length > 0);
 
-        public bool IsLocalSource => _snapshot?.Source is Models.ReviewSourceKind.Staged or Models.ReviewSourceKind.Unstaged or Models.ReviewSourceKind.AllLocal;
         public string RepositoryPath => _repository;
         public Repository Owner => _owner;
-
-        public bool CanActOnWorkingFile(ReviewFileItem item)
-        {
-            if (!IsLocalSource || item?.SourceFile == null || !item.SourceFile.IsLoaded)
-                return false;
-            return !item.Data.HasReviewWork || HasMatchingRecordedCode(item.Data, item.SourceFile);
-        }
 
         public Models.Review SelectedReview
         {
@@ -635,6 +614,7 @@ namespace SourceGit.ViewModels
         {
             _fileLoadCancellation?.Cancel();
             _selectedComment = null;
+            _lastTrackedChunk = null;
             SelectDisplayContext(_selectedFile);
             RebuildDiff();
             RefreshComments();
@@ -717,6 +697,7 @@ namespace SourceGit.ViewModels
 
         private void RebuildDiff()
         {
+            _lastTrackedChunk = null;
             var file = _selectedFile?.DisplayFile;
             var parsed = file == null || !file.IsLoaded || file.IsBinary ? null : Commands.Diff.ParsePatch(file.Patch).TextDiff;
             if (parsed == null)
@@ -804,6 +785,17 @@ namespace SourceGit.ViewModels
         {
             ActiveTabIndex = ReferenceEquals(context, _fileContext) ? 1 : 0;
             FocusEditorRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void SyncCommentTarget(ReviewDiffContext context, TextDiffSelectedChunk chunk, bool hasSelection)
+        {
+            if (!ReferenceEquals(context, _context) || chunk == null || _diff == null)
+                return;
+            if (_lastTrackedChunk is { } last && last.StartIdx == chunk.StartIdx && last.EndIdx == chunk.EndIdx &&
+                last.Combined == chunk.Combined && last.IsOldSide == chunk.IsOldSide)
+                return;
+            _lastTrackedChunk = chunk;
+            _context.TrackComment(_diff.Data, chunk, hasSelection);
         }
 
         public void OpenFileComment()

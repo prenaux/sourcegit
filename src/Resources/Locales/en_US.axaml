@@ -833,7 +833,6 @@
   <x:String x:Key="Text.Reviews.Attachment.NeedsAttention" xml:space="preserve">Needs attention</x:String>
   <x:String x:Key="Text.Reviews.Attachment.OutsideDiff" xml:space="preserve">Outside current diff</x:String>
   <x:String x:Key="Text.Reviews.BulkResult" xml:space="preserve">Updated {0} comments.</x:String>
-  <x:String x:Key="Text.Reviews.CloseComment" xml:space="preserve">Close</x:String>
   <x:String x:Key="Text.Reviews.CommentPlaceholder" xml:space="preserve">Write a comment. Changes are saved automatically.</x:String>
   <x:String x:Key="Text.Reviews.CommentsCount" xml:space="preserve">{0} comments</x:String>
   <x:String x:Key="Text.Reviews.CopyReview" xml:space="preserve">Copy Review</x:String>
