@@ -92,6 +92,10 @@ namespace SourceGit.ReviewTests
                 (nameof(HideReviewMarksOnFoldersAndPlainFiles), HideReviewMarksOnFoldersAndPlainFiles),
                 (nameof(KeepVisualLinesValidWhenReviewStateChanges), KeepVisualLinesValidWhenReviewStateChanges),
                 (nameof(KeepFileActionsInTheMenuForRecordedSources), KeepFileActionsInTheMenuForRecordedSources),
+                (nameof(SortCommentsFileLevelThenByFirstLine), SortCommentsFileLevelThenByFirstLine),
+                (nameof(FilterFilesByCommentState), FilterFilesByCommentState),
+                (nameof(AvoidConsecutiveMenuSeparators), AvoidConsecutiveMenuSeparators),
+                (nameof(FormatCommentRowsCompactly), FormatCommentRowsCompactly),
                 (nameof(SwitchTabsForCommentTargets), SwitchTabsForCommentTargets),
                 (nameof(ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff), ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff),
                 (nameof(ReopenHistoryReviewWithUncommentedSections), ReopenHistoryReviewWithUncommentedSections),
@@ -1452,6 +1456,103 @@ namespace SourceGit.ReviewTests
             }
         }
 
+        private static void SortCommentsFileLevelThenByFirstLine()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\nc\nd\ne\n");
+            var line4 = CreateComment(snapshot, 4);
+            line4.Body = "line4";
+            var range = CreateComment(snapshot, 2);
+            range.Body = "range";
+            range.Anchor.EndLine = 3;
+            range.Anchor.NewEndLine = 3;
+            var line2 = CreateComment(snapshot, 2);
+            line2.Body = "line2";
+            var whole = new ReviewComment { Body = "whole", Anchor = new ReviewAnchor { Side = ReviewSide.File } };
+            snapshot.Files[0].Comments.Add(line4);
+            snapshot.Files[0].Comments.Add(range);
+            snapshot.Files[0].Comments.Add(whole);
+            snapshot.Files[0].Comments.Add(line2);
+            page.OpenPreview(snapshot);
+            Check(page.Comments.Select(x => x.Body).SequenceEqual(new[] { "whole", "line2", "range", "line4" }),
+                "Comments must sort the whole-file comment first, then by first line, then by range length.");
+        }
+
+        private static void FilterFilesByCommentState()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\n");
+            snapshot.Files[0].Path = "tofix.txt";
+            snapshot.Files[0].Comments.Add(new ReviewComment { Body = "fix", State = ReviewCommentState.ToFix });
+            snapshot.Files.Add(new ReviewFile { Path = "fixed.txt", Comments = [new ReviewComment { Body = "done", State = ReviewCommentState.Fixed }] });
+            snapshot.Files.Add(new ReviewFile { Path = "dismissed.txt", Comments = [new ReviewComment { Body = "skip", State = ReviewCommentState.Dismissed }] });
+            snapshot.Files.Add(new ReviewFile
+            {
+                Path = "mixed.txt",
+                Comments =
+                [
+                    new ReviewComment { Body = "note", State = ReviewCommentState.Comment },
+                    new ReviewComment { Body = "done too", State = ReviewCommentState.Fixed },
+                ],
+            });
+            snapshot.Files.Add(new ReviewFile { Path = "none.txt" });
+            page.OpenPreview(snapshot);
+            page.ReviewFilter = ReviewFileFilter.ToFix;
+            Check(page.Files.Count == 1 && page.Files[0].Path == "tofix.txt", "The tofix filter must match files with at least one tofix comment.");
+            page.ReviewFilter = ReviewFileFilter.Fixed;
+            Check(page.Files.Count == 2 && page.Files.Select(x => x.Path).OrderBy(x => x).SequenceEqual(new[] { "fixed.txt", "mixed.txt" }),
+                "The fixed filter must include every file with a fixed comment.");
+            page.ReviewFilter = ReviewFileFilter.Comment;
+            Check(page.Files.Count == 1 && page.Files[0].Path == "mixed.txt", "The comment filter must match files with a comment-state finding.");
+            page.ReviewFilter = ReviewFileFilter.Dismissed;
+            Check(page.Files.Count == 1 && page.Files[0].Path == "dismissed.txt", "The dismissed filter must match dismissed findings.");
+            page.ReviewFilter = ReviewFileFilter.All;
+            Check(page.Files.Count == 5, "The all-files filter must restore every available file.");
+        }
+
+        private static void AvoidConsecutiveMenuSeparators()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\n");
+            snapshot.Source = ReviewSourceKind.Commit;
+            page.OpenPreview(snapshot);
+            var window = OpenReviewWindow(page);
+            try
+            {
+                var view = (SourceGit.Views.Reviews)window.Content;
+                var menu = view.CreateFileContextMenu(page, view.FindControl<SourceGit.Views.ChangeCollectionView>("FileList"));
+                var headers = menu.Items.OfType<MenuItem>().Select(x => x.Header?.ToString()).ToList();
+                Check(headers.Count > 0 && headers[0] != "-" && headers[^1] != "-",
+                    "The file menu must not start or end with a separator.");
+                Check(!headers.Zip(headers.Skip(1)).Any(x => x.First == "-" && x.Second == "-"),
+                    "The file menu must not contain two separators in a row.");
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+
+        private static void FormatCommentRowsCompactly()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\nc\nd\n");
+            var comment = CreateComment(snapshot, 2);
+            comment.Body = "first line\nsecond line";
+            comment.Anchor.EndLine = 3;
+            comment.Anchor.NewEndLine = 3;
+            snapshot.Files[0].Comments.Add(comment);
+            page.OpenPreview(snapshot);
+            var row = page.Comments.Single();
+            Check(row.FirstLine == "first line", "A comment row must show the first nonempty body line.");
+            Check(row.Details == "tofix - New: 2-3", $"A comment row must combine state and location, but was: {row.Details}");
+            Check(!row.Details.Contains("Attached", StringComparison.Ordinal), "Attached comments must not repeat the meaningless attached label.");
+            comment.Anchor.Attachment = ReviewAttachment.NeedsAttention;
+            row.Refresh();
+            Check(row.Details.Contains("Needs attention", StringComparison.Ordinal),
+                "A comment that needs attention must still say so in the compact row.");
+        }
+
         private static void SwitchTabsForCommentTargets()
         {
             using var page = new Reviews(CreateDirectory());
@@ -1582,6 +1683,9 @@ namespace SourceGit.ReviewTests
                 "Reviews must use the regular change file list with its view modes and context menus.");
             Check(view.FindControl<TabControl>("EditorTabs") != null,
                 "Reviews must keep its comment editing in one docked tab panel.");
+            var filterBox = view.FindControl<TextBox>("FileFilterBox");
+            Check(filterBox != null && filterBox.CornerRadius.TopLeft == 12 && filterBox.InnerLeftContent != null,
+                "The file filter must use the rounded search box used by Local changes.");
         }
 
         private static void RemovingTheLastCommentMakesTheFileUnreviewed()

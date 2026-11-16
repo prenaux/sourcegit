@@ -74,7 +74,7 @@ namespace SourceGit.ViewModels
         public int AddedLines => _diff?.Data?.AddedLines ?? 0;
         public int DeletedLines => _diff?.Data?.DeletedLines ?? 0;
         public bool IsPreview => _review != null && !SavedReviews.Contains(_review);
-        public string CommentsHeader => App.Text("Reviews.CommentsCount", Comments.Count);
+        public string CommentsCount => $"({Comments.Count})";
         public string ComparisonLabel => _snapshot == null ? string.Empty : _snapshot.Source is Models.ReviewSourceKind.Commit or Models.ReviewSourceKind.Comparison ?
             $"{_snapshot.BaseRevision} -> {_snapshot.TargetRevision}" : App.Text("Reviews.Source." + _snapshot.Source);
         public string SelectedFileFullPath => _selectedFile == null ? string.Empty : GetFullPath(_selectedFile.Path);
@@ -586,8 +586,31 @@ namespace SourceGit.ViewModels
 
         private bool MatchesFileFilter(ReviewFileItem file)
         {
-            return (string.IsNullOrEmpty(_fileFilter) || file.Path.Contains(_fileFilter, StringComparison.OrdinalIgnoreCase)) &&
-                (_reviewFilter == ReviewFileFilter.All || (_reviewFilter == ReviewFileFilter.Reviewed) == file.Data.HasReviewWork);
+            if (!string.IsNullOrEmpty(_fileFilter) && !file.Path.Contains(_fileFilter, StringComparison.OrdinalIgnoreCase))
+                return false;
+            switch (_reviewFilter)
+            {
+                case ReviewFileFilter.All:
+                    return true;
+                case ReviewFileFilter.Reviewed:
+                    return file.Data.HasReviewWork;
+                case ReviewFileFilter.Unreviewed:
+                    return !file.Data.HasReviewWork;
+                default:
+                    var state = ToCommentState(_reviewFilter);
+                    return file.Data.Comments.Exists(x => x.State == state && !string.IsNullOrWhiteSpace(x.Body));
+            }
+        }
+
+        private static Models.ReviewCommentState ToCommentState(ReviewFileFilter filter)
+        {
+            return filter switch
+            {
+                ReviewFileFilter.Comment => Models.ReviewCommentState.Comment,
+                ReviewFileFilter.ToFix => Models.ReviewCommentState.ToFix,
+                ReviewFileFilter.Fixed => Models.ReviewCommentState.Fixed,
+                _ => Models.ReviewCommentState.Dismissed,
+            };
         }
 
         public void RefreshFileFilter()
@@ -770,15 +793,38 @@ namespace SourceGit.ViewModels
             {
                 Comments.Clear();
                 if (_selectedFile != null)
-                    foreach (var comment in _selectedFile.Data.Comments)
+                {
+                    foreach (var comment in _selectedFile.Data.Comments
+                        .OrderBy(x => x.Anchor.Side == Models.ReviewSide.File ? 0 : 1)
+                        .ThenBy(GetCommentFirstLine)
+                        .ThenBy(GetCommentLineCount))
                         Comments.Add(new ReviewCommentItem(comment));
+                }
             }
             foreach (var item in Comments)
                 item.Refresh();
             _selectedComment = Comments.FirstOrDefault(x => x.Data.Id == selected);
             _isSelecting = false;
             OnPropertyChanged(nameof(SelectedComment));
-            OnPropertyChanged(nameof(CommentsHeader));
+            OnPropertyChanged(nameof(CommentsCount));
+        }
+
+        private static int GetCommentFirstLine(Models.ReviewComment comment)
+        {
+            var anchor = comment.Anchor;
+            if (anchor.Side == Models.ReviewSide.File)
+                return 0;
+            var oldStart = anchor.OldStartLine > 0 ? anchor.OldStartLine : anchor.Side == Models.ReviewSide.Old ? anchor.StartLine : 0;
+            var newStart = anchor.NewStartLine > 0 ? anchor.NewStartLine : anchor.Side == Models.ReviewSide.New ? anchor.StartLine : 0;
+            if (oldStart > 0 && newStart > 0)
+                return Math.Min(oldStart, newStart);
+            return oldStart > 0 ? oldStart : newStart;
+        }
+
+        private static int GetCommentLineCount(Models.ReviewComment comment)
+        {
+            var anchor = comment.Anchor;
+            return anchor.Side == Models.ReviewSide.File ? 0 : Math.Max(1, anchor.EndLine - anchor.StartLine + 1);
         }
 
         public void NotifyEditorOpened(ReviewDiffContext context)

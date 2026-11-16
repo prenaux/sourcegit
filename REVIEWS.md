@@ -21,14 +21,15 @@ does not automatically start a local source.
 
 The file list is the same change tree used by Local changes, with Tree, Grid,
 and List modes, a remembered view mode, and remembered folder expansion. The
-text filter matches repository-relative paths and combines with All files,
-Reviewed, and Unreviewed. The list status icon follows the captured patch, so a
-deleted file shows the deleted icon and an added file shows the added icon
-before its content loads. Each file row shows one review mark after its name: a
-warning glyph and the open count when the file has tofix findings, a check glyph
-when it has comments and no tofix findings, and no mark when it has no comments.
-Folder rows never show a review mark, and folders do not aggregate their
-children's marks.
+rounded search field matches repository-relative paths and combines with All
+files, Reviewed, Unreviewed, Comment, To fix, Fixed, and Dismissed. A file
+matches a comment-state filter when at least one nonempty comment has that state.
+The list status icon follows the captured patch, so a deleted file shows the
+deleted icon and an added file shows the added icon before its content loads.
+Each file row shows one review mark after its name: a warning glyph and the open
+count when the file has tofix findings, a check glyph when it has comments and
+no tofix findings, and no mark when it has no comments. Folder rows never show a
+review mark, and folders do not aggregate their children's marks.
 
 The file tree loads paths and status before file contents. Selecting a file
 loads its diff asynchronously. Selecting another file cancels obsolete loading.
@@ -150,8 +151,13 @@ The comment shortcut also accepts Command on macOS. Boundary navigation does not
 intercept normal text navigation inside a comment or general-review editor.
 
 The comments list sits below the file tree behind a horizontal splitter. Its
-header shows the selected file's comment count. A mixed target displays both old
-and new source ranges.
+header shows the selected file's comment count using the same style as the
+Unstaged and Staged section labels. Each row uses two lines: the first nonempty
+body line, then a grey line with the state and the range, for example
+"tofix - New: 12-13". Attached comments omit the meaningless Attached word;
+Needs attention and Outside current diff remain visible. Comments sort the
+whole-file finding first, then by the first line of the range, then by range
+length. A mixed target displays both old and new source ranges.
 
 Updating preserves comment IDs and workflow states. Unambiguous unchanged ranges
 migrate using their recorded context. Edited or ambiguous ranges show Needs

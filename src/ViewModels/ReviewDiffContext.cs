@@ -9,6 +9,10 @@ namespace SourceGit.ViewModels
         All,
         Reviewed,
         Unreviewed,
+        Comment,
+        ToFix,
+        Fixed,
+        Dismissed,
     }
 
     public enum ReviewPane
@@ -74,6 +78,16 @@ namespace SourceGit.ViewModels
     {
         public Models.ReviewComment Data { get; } = comment;
         public string Body => Data.Body;
+        public string FirstLine
+        {
+            get
+            {
+                foreach (var line in Data.Body.Split('\n'))
+                    if (!string.IsNullOrWhiteSpace(line))
+                        return line.Trim();
+                return string.Empty;
+            }
+        }
         public string State => App.Text("Reviews.State." + Data.State);
         public string Attachment => App.Text("Reviews.Attachment." + Data.Anchor.Attachment);
         public string Location
@@ -86,12 +100,23 @@ namespace SourceGit.ViewModels
             }
         }
 
+        public string Details
+        {
+            get
+            {
+                var attachment = Data.Anchor.Attachment == Models.ReviewAttachment.Attached ? string.Empty : Attachment;
+                return attachment.Length == 0 ? $"{State} - {Location}" : $"{State} - {attachment} - {Location}";
+            }
+        }
+
         public void Refresh()
         {
             OnPropertyChanged(nameof(Body));
+            OnPropertyChanged(nameof(FirstLine));
             OnPropertyChanged(nameof(State));
             OnPropertyChanged(nameof(Attachment));
             OnPropertyChanged(nameof(Location));
+            OnPropertyChanged(nameof(Details));
         }
     }
 

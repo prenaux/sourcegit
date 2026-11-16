@@ -132,6 +132,13 @@ namespace SourceGit.Views
             e.Handled = true;
         }
 
+        private void OnClearFileFilter(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is ViewModels.Reviews model)
+                model.FileFilter = string.Empty;
+            e.Handled = true;
+        }
+
         private void OnFilesContextRequested(object sender, ContextRequestedEventArgs e)
         {
             if (DataContext is not ViewModels.Reviews model || sender is not ChangeCollectionView view)
@@ -318,7 +325,6 @@ namespace SourceGit.Views
 
             menu.Items.Add(history);
             menu.Items.Add(blame);
-            menu.Items.Add(new MenuItem { Header = "-" });
         }
 
         private void TryAddCustomActionsToContextMenu(ContextMenu menu, ViewModels.Reviews model, string path)
@@ -330,6 +336,7 @@ namespace SourceGit.Views
             if (actions.Count == 0)
                 return;
             var target = new Models.CustomActionTargetFile(path, null);
+            menu.Items.Add(new MenuItem { Header = "-" });
             foreach (var (dup, label) in actions)
             {
                 var item = new MenuItem();
@@ -342,7 +349,6 @@ namespace SourceGit.Views
                 };
                 menu.Items.Add(item);
             }
-            menu.Items.Add(new MenuItem { Header = "-" });
         }
 
         private static void AddCopyPathsToContextMenu(ContextMenu menu, ViewModels.Reviews model, System.Collections.Generic.List<string> paths)

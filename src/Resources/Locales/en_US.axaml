@@ -834,7 +834,7 @@
   <x:String x:Key="Text.Reviews.Attachment.OutsideDiff" xml:space="preserve">Outside current diff</x:String>
   <x:String x:Key="Text.Reviews.BulkResult" xml:space="preserve">Updated {0} comments.</x:String>
   <x:String x:Key="Text.Reviews.CommentPlaceholder" xml:space="preserve">Write a comment. Changes are saved automatically.</x:String>
-  <x:String x:Key="Text.Reviews.CommentsCount" xml:space="preserve">{0} comments</x:String>
+  <x:String x:Key="Text.Reviews.Comments" xml:space="preserve">COMMENTS</x:String>
   <x:String x:Key="Text.Reviews.CopyReview" xml:space="preserve">Copy Review</x:String>
   <x:String x:Key="Text.Reviews.DefaultTitle" xml:space="preserve">{0} - {1}</x:String>
   <x:String x:Key="Text.Reviews.FileComment" xml:space="preserve">Whole file</x:String>
@@ -843,7 +843,11 @@
   <x:String x:Key="Text.Reviews.StartUnstaged" xml:space="preserve">Review Unstaged Changes</x:String>
   <x:String x:Key="Text.Reviews.StartAllLocal" xml:space="preserve">Review All Local Changes</x:String>
   <x:String x:Key="Text.Reviews.Filter.All" xml:space="preserve">All files</x:String>
+  <x:String x:Key="Text.Reviews.Filter.Comment" xml:space="preserve">Comment</x:String>
+  <x:String x:Key="Text.Reviews.Filter.Dismissed" xml:space="preserve">Dismissed</x:String>
+  <x:String x:Key="Text.Reviews.Filter.Fixed" xml:space="preserve">Fixed</x:String>
   <x:String x:Key="Text.Reviews.Filter.Reviewed" xml:space="preserve">Reviewed</x:String>
+  <x:String x:Key="Text.Reviews.Filter.ToFix" xml:space="preserve">To fix</x:String>
   <x:String x:Key="Text.Reviews.Filter.Unreviewed" xml:space="preserve">Unreviewed</x:String>
   <x:String x:Key="Text.Reviews.RecordedContextOnly" xml:space="preserve">Recorded comment context only. The original full source is unavailable or the local changes differ. Update the snapshot to review current changes.</x:String>
   <x:String x:Key="Text.Reviews.SourceUnavailable" xml:space="preserve">Recorded context only. The full source could not be loaded: {0}</x:String>
