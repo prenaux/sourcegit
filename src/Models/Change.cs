@@ -1,5 +1,7 @@
 ﻿namespace SourceGit.Models
 {
+    using System.ComponentModel;
+
     public enum ChangeViewMode
     {
         List,
@@ -39,8 +41,10 @@
         public string ParentSHA { get; set; } = "";
     }
 
-    public class Change
+    public class Change : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged;
+
         public ChangeState Index { get; set; } = ChangeState.None;
         public ChangeState WorkTree { get; set; } = ChangeState.None;
         public string Path { get; set; } = "";
@@ -51,6 +55,35 @@
         public bool IsConflicted => WorkTree == ChangeState.Conflicted;
         public string ConflictMarker => CONFLICT_MARKERS[(int)ConflictReason];
         public string ConflictDesc => CONFLICT_DESCS[(int)ConflictReason];
+
+        public int ReviewToFixCount
+        {
+            get => _reviewToFixCount;
+            set
+            {
+                if (_reviewToFixCount == value)
+                    return;
+                _reviewToFixCount = value;
+                Notify(nameof(ReviewToFixCount));
+                Notify(nameof(HasReviewToFix));
+            }
+        }
+
+        public bool HasReviewComments
+        {
+            get => _hasReviewComments;
+            set
+            {
+                if (_hasReviewComments == value)
+                    return;
+                _hasReviewComments = value;
+                Notify(nameof(HasReviewComments));
+                Notify(nameof(IsReviewedWithoutToFix));
+            }
+        }
+
+        public bool HasReviewToFix => _reviewToFixCount > 0;
+        public bool IsReviewedWithoutToFix => _hasReviewComments && _reviewToFixCount == 0;
 
         public string WorkTreeDesc => TYPE_DESCS[(int)WorkTree];
         public string IndexDesc => TYPE_DESCS[(int)Index];
@@ -78,6 +111,11 @@
             if (!string.IsNullOrEmpty(OriginalPath) && OriginalPath[0] == '"')
                 OriginalPath = OriginalPath.Substring(1, OriginalPath.Length - 2);
         }
+
+        private void Notify(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        private int _reviewToFixCount;
+        private bool _hasReviewComments;
 
         private static readonly string[] TYPE_DESCS =
         [

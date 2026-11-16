@@ -15,12 +15,15 @@ namespace SourceGit.ViewModels
     public sealed class Reviews : ObservableObject, IDisposable
     {
         private readonly string _repository;
+        private readonly Repository _owner;
+        private readonly Models.RepositoryUIStates _uiStates;
         private readonly Models.ReviewStore _store;
         private readonly DispatcherTimer _saveTimer;
         private readonly SemaphoreSlim _interactionLock = new(1);
         private readonly Dictionary<string, Models.Review> _pending = [];
-        private readonly Stack<List<(Models.ReviewComment Comment, Models.ReviewCommentState State)>> _undo = new();
         private readonly List<ReviewFileItem> _allFiles = [];
+        private readonly List<Models.Change> _selectedChanges = [];
+        private readonly Models.TreeExpansionState _expansionState = new();
         private Task _lastSave = Task.CompletedTask;
         private Models.Review _review;
         private Models.Review _selectedReview;
@@ -29,6 +32,7 @@ namespace SourceGit.ViewModels
         private ReviewFileItem _selectedFile;
         private ReviewCommentItem _selectedComment;
         private ReviewDiffContext _context;
+        private ReviewDiffContext _fileContext;
         private TextDiffContext _diff;
         private Models.ReviewComment _reattach;
         private string _fileFilter = string.Empty;
@@ -41,36 +45,115 @@ namespace SourceGit.ViewModels
         private bool _initialized;
         private bool _isCheckingSource;
         private bool _disposed;
-        private Models.ReviewCommentState _bulkState = Models.ReviewCommentState.ToFix;
+        private bool _commentsExpanded;
+        private int _activeTab;
+        private Models.ChangeViewMode _viewMode = Models.ChangeViewMode.Tree;
         private CancellationTokenSource _fileLoadCancellation;
         private bool _isLoadingFile;
-        private bool _isGeneralExpanded;
         private string _generalReviewMessage = string.Empty;
         private string _fileViewNotice = string.Empty;
         private ReviewFileFilter _reviewFilter;
         public Task ReviewLoadTask { get; private set; } = Task.CompletedTask;
         public Task FileLoadTask { get; private set; } = Task.CompletedTask;
+        public event EventHandler FocusEditorRequested;
+        public event EventHandler CommentTargetRequested;
 
         public AvaloniaList<Models.Review> SavedReviews { get; } = [];
         public AvaloniaList<Models.ReviewSnapshot> Snapshots { get; } = [];
         public AvaloniaList<ReviewFileItem> Files { get; } = [];
         public AvaloniaList<ReviewCommentItem> Comments { get; } = [];
+        public List<Models.Change> Changes { get; private set; } = [];
         public ReviewFileFilter[] ReviewFilterChoices { get; } = Enum.GetValues<ReviewFileFilter>();
         public Models.ReviewCommentState[] StateChoices { get; } = Enum.GetValues<Models.ReviewCommentState>();
         public Models.Review CurrentReview => _review;
         public Models.ReviewSnapshot CurrentSnapshot => _snapshot;
         public bool HasPendingReattach => _reattach != null;
         public bool HasReview => _review != null;
-        public bool HasFile => _selectedFile != null;
         public bool IsLoadingFile { get => _isLoadingFile; private set => SetProperty(ref _isLoadingFile, value); }
-        public bool IsGeneralExpanded { get => _isGeneralExpanded; set => SetProperty(ref _isGeneralExpanded, value); }
         public bool HasTextDiff => _diff != null;
+        public int AddedLines => _diff?.Data?.AddedLines ?? 0;
+        public int DeletedLines => _diff?.Data?.DeletedLines ?? 0;
         public bool IsPreview => _review != null && !SavedReviews.Contains(_review);
-        public bool CanUndo => _undo.Count > 0;
+        public string CommentsHeader => App.Text("Reviews.CommentsCount", Comments.Count);
         public string ComparisonLabel => _snapshot == null ? string.Empty : _snapshot.Source is Models.ReviewSourceKind.Commit or Models.ReviewSourceKind.Comparison ?
             $"{_snapshot.BaseRevision} -> {_snapshot.TargetRevision}" : App.Text("Reviews.Source." + _snapshot.Source);
         public string SelectedFileFullPath => _selectedFile == null ? string.Empty : GetFullPath(_selectedFile.Path);
         public string FileViewNotice { get => _fileViewNotice; private set => SetProperty(ref _fileViewNotice, value); }
+        public Models.TreeExpansionState ExpansionState => _expansionState;
+        public ReviewDiffContext FileContext { get => _fileContext; private set => SetProperty(ref _fileContext, value); }
+        public int ActiveTabIndex
+        {
+            get => _activeTab;
+            set
+            {
+                if (!SetProperty(ref _activeTab, value))
+                    return;
+                if (value == 1 && _fileContext?.IsEditing != true)
+                    _fileContext?.BeginFileComment();
+                else if (value == 0 && _context?.IsEditing != true)
+                    CommentTargetRequested?.Invoke(this, EventArgs.Empty);
+            }
+        }
+        public bool IsCommentsExpanded
+        {
+            get => _uiStates?.ReviewCommentsExpanded ?? _commentsExpanded;
+            set
+            {
+                if (IsCommentsExpanded == value)
+                    return;
+                _commentsExpanded = value;
+                if (_uiStates != null)
+                    _uiStates.ReviewCommentsExpanded = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public Models.ChangeViewMode ViewMode
+        {
+            get => _uiStates?.ReviewFileViewMode ?? _viewMode;
+            set
+            {
+                if (ViewMode == value)
+                    return;
+                _viewMode = value;
+                if (_uiStates != null)
+                    _uiStates.ReviewFileViewMode = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public List<ReviewFileItem> SelectedFileItems => _selectedChanges.Count > 0 ?
+            Files.Where(x => _selectedChanges.Contains(x.Change)).ToList() :
+            _selectedFile != null ? [_selectedFile] : [];
+
+        public int SelectedToFixCount
+        {
+            get
+            {
+                var count = 0;
+                foreach (var item in SelectedFileItems)
+                    foreach (var comment in item.Data.Comments)
+                        if (comment.State == Models.ReviewCommentState.ToFix && !string.IsNullOrWhiteSpace(comment.Body))
+                            count++;
+                return count;
+            }
+        }
+
+        public bool CanEditFileComment => SelectedFileItems.Count == 1;
+        public bool CanMarkFilesAsOk => SelectedFileItems.Count > 0 && SelectedToFixCount == 0;
+        public bool CanExportPatch => SelectedFileItems.Count > 0 && SelectedFileItems.TrueForAll(x =>
+            x.SourceFile != null && x.SourceFile.IsLoaded && !x.IsRecordedContext && x.SourceFile.Patch.Length > 0);
+
+        public bool IsLocalSource => _snapshot?.Source is Models.ReviewSourceKind.Staged or Models.ReviewSourceKind.Unstaged or Models.ReviewSourceKind.AllLocal;
+        public string RepositoryPath => _repository;
+        public Repository Owner => _owner;
+
+        public bool CanActOnWorkingFile(ReviewFileItem item)
+        {
+            if (!IsLocalSource || item?.SourceFile == null || !item.SourceFile.IsLoaded)
+                return false;
+            return !item.Data.HasReviewWork || HasMatchingRecordedCode(item.Data, item.SourceFile);
+        }
 
         public Models.Review SelectedReview
         {
@@ -106,7 +189,28 @@ namespace SourceGit.ViewModels
                     _fileLoadCancellation?.Cancel();
                     ReleasePreview(previous);
                     BuildFileView();
+                    SyncSelectedChanges();
                 }
+            }
+        }
+
+        public List<Models.Change> SelectedChanges
+        {
+            get => _selectedChanges;
+            set
+            {
+                var next = value ?? [];
+                if (_selectedChanges.SequenceEqual(next))
+                    return;
+                _selectedChanges.Clear();
+                _selectedChanges.AddRange(next);
+                OnPropertyChanged();
+                OnSelectionDependentChanged();
+                if (_isSelecting || next.Count != 1)
+                    return;
+                var item = Files.FirstOrDefault(x => ReferenceEquals(x.Change, next[0]));
+                if (item != null && !ReferenceEquals(item, _selectedFile))
+                    SelectedFile = item;
             }
         }
 
@@ -136,7 +240,6 @@ namespace SourceGit.ViewModels
         public bool SourceChanged { get => _sourceChanged; private set => SetProperty(ref _sourceChanged, value); }
         public string Status { get => _status; private set => SetProperty(ref _status, value); }
         public string SaveStatus { get => _saveStatus; private set => SetProperty(ref _saveStatus, value); }
-        public Models.ReviewCommentState BulkState { get => _bulkState; set => SetProperty(ref _bulkState, value); }
 
         public string Title
         {
@@ -225,6 +328,9 @@ namespace SourceGit.ViewModels
 
         public Reviews(Repository repository) : this(repository.FullPath)
         {
+            _owner = repository;
+            _uiStates = repository.UIStates;
+            _expansionState = _uiStates.ReviewFileTreeExpansion;
         }
 
         public Reviews(string repository)
@@ -437,7 +543,6 @@ namespace SourceGit.ViewModels
                 _selectedFile = null;
                 _selectedComment = null;
                 _reattach = null;
-                _undo.Clear();
             }
             finally
             {
@@ -456,7 +561,6 @@ namespace SourceGit.ViewModels
             OnPropertyChanged(nameof(GeneralReviewMessage));
             OnPropertyChanged(nameof(HasReview));
             OnPropertyChanged(nameof(IsPreview));
-            OnPropertyChanged(nameof(CanUndo));
         }
 
         private void FilterFiles()
@@ -465,11 +569,40 @@ namespace SourceGit.ViewModels
             _isSelecting = true;
             Files.Clear();
             Files.AddRange(_allFiles.Where(MatchesFileFilter));
+            Changes = Files.Select(x => x.Change).ToList();
+            OnPropertyChanged(nameof(Changes));
             _isSelecting = false;
             _selectedFile = null;
             SelectedFile = selected != null && Files.Contains(selected) ? selected : Files.Count > 0 ? Files[0] : null;
+            SyncSelectedChanges();
             if (SelectedFile == null)
                 BuildFileView();
+        }
+
+        private void SyncSelectedChanges()
+        {
+            _isSelecting = true;
+            _selectedChanges.Clear();
+            if (_selectedFile != null)
+                _selectedChanges.Add(_selectedFile.Change);
+            OnPropertyChanged(nameof(SelectedChanges));
+            _isSelecting = false;
+            OnSelectionDependentChanged();
+        }
+
+        private void OnSelectionDependentChanged()
+        {
+            OnPropertyChanged(nameof(SelectedFileItems));
+            OnPropertyChanged(nameof(SelectedToFixCount));
+            OnPropertyChanged(nameof(CanEditFileComment));
+            OnPropertyChanged(nameof(CanMarkFilesAsOk));
+            OnPropertyChanged(nameof(CanExportPatch));
+        }
+
+        private void RefreshFileMarks()
+        {
+            foreach (var item in Files)
+                item.RefreshMark();
         }
 
         private bool MatchesFileFilter(ReviewFileItem file)
@@ -505,7 +638,6 @@ namespace SourceGit.ViewModels
             SelectDisplayContext(_selectedFile);
             RebuildDiff();
             RefreshComments();
-            OnPropertyChanged(nameof(HasFile));
             OnPropertyChanged(nameof(SelectedFileFullPath));
             IsLoadingFile = _selectedFile?.SourceFile?.IsLoaded == false;
             if (IsLoadingFile)
@@ -536,7 +668,14 @@ namespace SourceGit.ViewModels
             if (item.IsRecordedContext)
                 FileViewNotice = App.Text("Reviews.RecordedContextOnly");
             if (display?.IsLoaded == true)
+            {
                 Context = new ReviewDiffContext(this, item.Data, display);
+                FileContext = new ReviewDiffContext(this, item.Data, display, true);
+            }
+            else
+            {
+                FileContext = null;
+            }
         }
 
         private async Task LoadSelectedFileAsync(Models.ReviewSnapshot snapshot, ReviewFileItem item, CancellationToken cancellationToken)
@@ -592,6 +731,8 @@ namespace SourceGit.ViewModels
                 Diff = context;
             }
             OnPropertyChanged(nameof(HasTextDiff));
+            OnPropertyChanged(nameof(AddedLines));
+            OnPropertyChanged(nameof(DeletedLines));
         }
 
         public string ReadContent(string hash)
@@ -631,13 +772,12 @@ namespace SourceGit.ViewModels
             if (!_snapshot.Files.Contains(file))
                 _snapshot.Files.Add(file);
             file.MarkChanged();
-            foreach (var item in _allFiles)
-                if (ReferenceEquals(item.Data, file))
-                    item.Refresh();
             RefreshComments();
+            RefreshFileMarks();
             QueueSave();
-            if (_context?.IsEditing != true)
+            if (_context?.IsEditing != true && _fileContext?.IsEditing != true)
                 RefreshFileFilter();
+            OnSelectionDependentChanged();
         }
 
         private void RefreshComments()
@@ -657,9 +797,21 @@ namespace SourceGit.ViewModels
             _selectedComment = Comments.FirstOrDefault(x => x.Data.Id == selected);
             _isSelecting = false;
             OnPropertyChanged(nameof(SelectedComment));
+            OnPropertyChanged(nameof(CommentsHeader));
         }
 
-        public void AddFileComment() => _context?.BeginFileComment();
+        public void NotifyEditorOpened(ReviewDiffContext context)
+        {
+            ActiveTabIndex = ReferenceEquals(context, _fileContext) ? 1 : 0;
+            FocusEditorRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void OpenFileComment()
+        {
+            if (!CanEditFileComment)
+                return;
+            FileContext?.BeginFileComment();
+        }
 
         public void SelectComment(Models.ReviewComment comment)
         {
@@ -674,49 +826,76 @@ namespace SourceGit.ViewModels
             SelectedComment = null;
         }
 
-        public void SetAllCommentStates()
+        public void SetSelectedCommentsState(Models.ReviewCommentState state)
         {
-            ChangeCommentStates(_bulkState, _selectedFile?.Data.Comments ?? []);
-        }
-
-        public void ResolveRemainingComments()
-        {
-            ChangeCommentStates(Models.ReviewCommentState.Fixed,
-                _selectedFile?.Data.Comments.FindAll(x => x.State is Models.ReviewCommentState.Comment or Models.ReviewCommentState.ToFix) ?? []);
-        }
-
-        private void ChangeCommentStates(Models.ReviewCommentState state, List<Models.ReviewComment> comments)
-        {
-            var changes = new List<(Models.ReviewComment Comment, Models.ReviewCommentState State)>();
-            foreach (var comment in comments)
-            {
-                if (comment.State == state)
-                    continue;
-                changes.Add((comment, comment.State));
-                comment.State = state;
-            }
-            if (changes.Count == 0)
+            var files = SelectedFileItems;
+            var count = 0;
+            foreach (var item in files)
+                foreach (var comment in item.Data.Comments)
+                {
+                    if (comment.State == state || string.IsNullOrWhiteSpace(comment.Body))
+                        continue;
+                    comment.State = state;
+                    count++;
+                }
+            if (count == 0)
                 return;
-            _undo.Push(changes);
-            Status = App.Text("Reviews.BulkResult", changes.Count);
-            NotifyFileChanged(_selectedFile.Data);
-            _context?.Refresh();
-            OnPropertyChanged(nameof(CanUndo));
+            if (files.Count > 0)
+                NotifyFileChanged(files[0].Data);
+            Status = App.Text("Reviews.BulkResult", count);
+            RefreshFileFilter();
         }
 
-        public void UndoCommentStates()
+        public void MarkFilesAsOk()
         {
-            if (_undo.Count == 0)
+            if (!CanMarkFilesAsOk)
                 return;
-            foreach (var change in _undo.Pop())
+            var files = SelectedFileItems;
+            foreach (var item in files)
             {
-                change.Comment.State = change.State;
-                foreach (var file in _snapshot.Files)
-                    if (file.Comments.Contains(change.Comment))
-                        NotifyFileChanged(file);
+                var comment = item.Data.Comments.Find(x => x.Anchor.Side == Models.ReviewSide.File);
+                if (comment == null)
+                {
+                    var anchor = new Models.ReviewAnchor
+                    {
+                        Side = Models.ReviewSide.File,
+                        Attachment = item.Data.IsOutsideDiff ? Models.ReviewAttachment.OutsideDiff : Models.ReviewAttachment.Attached,
+                    };
+                    AddComment(item.Data, new Models.ReviewComment
+                    {
+                        Body = "OK",
+                        State = Models.ReviewCommentState.Dismissed,
+                        Anchor = anchor,
+                        OriginAnchor = anchor.Copy(),
+                        OriginSnapshot = _snapshot.Id,
+                        OriginPath = item.Path,
+                    });
+                }
+                else
+                {
+                    comment.Body = "OK";
+                    comment.State = Models.ReviewCommentState.Dismissed;
+                    NotifyFileChanged(item.Data);
+                }
             }
-            _context?.Refresh();
-            OnPropertyChanged(nameof(CanUndo));
+            Status = App.Text("Reviews.MarkedOk", files.Count);
+            RefreshFileFilter();
+        }
+
+        public string GetSelectedPatchText()
+        {
+            if (!CanExportPatch)
+                return string.Empty;
+            var builder = new System.Text.StringBuilder();
+            foreach (var item in SelectedFileItems)
+                builder.Append(item.SourceFile.Patch.TrimEnd('\n')).Append('\n');
+            return builder.ToString();
+        }
+
+        public Task CopyPatchAsync()
+        {
+            var patch = GetSelectedPatchText();
+            return patch.Length == 0 ? Task.CompletedTask : App.CopyTextAsync(patch);
         }
 
         public void BeginReattach(Models.ReviewComment comment)

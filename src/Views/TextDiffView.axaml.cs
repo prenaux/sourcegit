@@ -705,7 +705,6 @@ namespace SourceGit.Views
 
         private void OnReviewChanged(object sender, PropertyChangedEventArgs e)
         {
-            this.FindAncestorOfType<TextDiffView>()?.QueueReviewLayout();
             TextArea.TextView.Redraw();
             foreach (var margin in TextArea.LeftMargins)
                 margin.InvalidateVisual();
@@ -745,8 +744,6 @@ namespace SourceGit.Views
             var anchor = TextArea.Selection.IsEmpty ? caret : Document.GetOffset(TextArea.Selection.StartPosition.Location);
             var next = BlockNavigation.FindBoundaryOffset(caret, direction,
                 line => line > Document.LineCount ? Document.TextLength : Document.GetLineByNumber(line).Offset);
-            if (review.IsEditing)
-                review.CloseEditor();
             this.FindAncestorOfType<TextDiffView>()?.RememberPresenter(this);
             CaretOffset = next;
             if (modifiers.HasFlag(KeyModifiers.Shift))
@@ -762,8 +759,6 @@ namespace SourceGit.Views
         {
             if (_reviewContext == null)
                 return;
-            if (_reviewContext.IsEditing)
-                _reviewContext.CloseEditor();
             this.FindAncestorOfType<TextDiffView>()?.RememberPresenter(this);
             UpdateReviewSelectionChunk();
         }
@@ -776,40 +771,6 @@ namespace SourceGit.Views
             var line = view.GetVisualLine(TextArea.Caret.Line);
             var y = line == null ? view.VerticalOffset : line.GetTextLineVisualYPosition(line.TextLines[0], VisualYPosition.LineTop);
             UpdateSelectedChunk(y);
-        }
-
-        public int FindReviewAnchorLine()
-        {
-            return _reviewContext == null ? 0 : GetLines().FindIndex(x => _reviewContext.IsSelectedLine(x, GetReviewPane())) + 1;
-        }
-
-        public bool IsReviewViewportReady => TextArea.TextView.VisualLinesValid && TextArea.TextView.VisualLines.Count > 0;
-
-        public bool TryGetReviewBounds(out Rect bounds)
-        {
-            bounds = default;
-            var first = FindReviewAnchorLine();
-            if (first == 0 || !IsReviewViewportReady)
-                return false;
-            var lines = GetLines();
-            var last = lines.FindLastIndex(x => _reviewContext.IsSelectedLine(x, GetReviewPane())) + 1;
-            var view = TextArea.TextView;
-            var visibleFirst = view.VisualLines[0].FirstDocumentLine.LineNumber;
-            var visibleLast = view.VisualLines[^1].LastDocumentLine.LineNumber;
-            if (last < visibleFirst || first > visibleLast)
-                return false;
-            var firstVisual = view.GetVisualLine(Math.Max(first, visibleFirst));
-            var lastVisual = view.GetVisualLine(Math.Min(last, visibleLast));
-            if (firstVisual == null || lastVisual == null)
-                return false;
-            var top = firstVisual.GetTextLineVisualYPosition(firstVisual.TextLines[0], VisualYPosition.LineTop) - view.VerticalOffset;
-            var bottom = lastVisual.GetTextLineVisualYPosition(lastVisual.TextLines[^1], VisualYPosition.LineBottom) - view.VerticalOffset;
-            var root = this.FindAncestorOfType<TextDiffView>();
-            var origin = root == null ? null : view.TranslatePoint(new Point(0, Math.Max(0, top)), root);
-            if (origin == null)
-                return false;
-            bounds = new Rect(origin.Value.X, origin.Value.Y, view.Bounds.Width, Math.Max(0, Math.Min(view.Bounds.Height, bottom) - Math.Max(0, top)));
-            return bounds.Height > 0;
         }
 
         private async void OnTextAreaKeyDown(object sender, KeyEventArgs e)
@@ -1000,8 +961,8 @@ namespace SourceGit.Views
             if (DataContext is not ViewModels.TextDiffContext ctx)
                 return;
 
-            if (ctx.IsReview)
-                this.FindAncestorOfType<TextDiffView>()?.QueueReviewLayout();
+            if (ctx.IsReview && ctx.IsSideBySide() && !IsOld)
+                return;
             if (ctx.IsSideBySide() && !IsOld)
                 return;
 
@@ -1910,7 +1871,6 @@ namespace SourceGit.Views
         public TextDiffView()
         {
             InitializeComponent();
-            ReviewEditor.SizeChanged += (_, _) => QueueReviewLayout();
         }
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -1943,12 +1903,7 @@ namespace SourceGit.Views
                 ctx.SelectedChunk = null;
         }
 
-        private const double MaxReviewEditorWidth = 360;
-        private const double ReviewEditorRightMargin = 28;
-        private ViewModels.ReviewDiffContext _review;
         private ThemedTextDiffPresenter _activePresenter;
-        private bool _reviewLayoutQueued;
-        private bool _openingReviewEditor;
 
         public void RememberPresenter(ThemedTextDiffPresenter presenter) => _activePresenter = presenter;
 
@@ -1960,100 +1915,10 @@ namespace SourceGit.Views
                 this.FindDescendantOfType<ThemedTextDiffPresenter>();
         }
 
-        protected override void OnLoaded(RoutedEventArgs e)
-        {
-            base.OnLoaded(e);
-            ConnectReview();
-            if (_review?.IsEditing == true)
-                OnReviewEditorOpened(_review, EventArgs.Empty);
-        }
-
-        protected override void OnUnloaded(RoutedEventArgs e)
-        {
-            if (_review != null)
-                _review.EditorOpened -= OnReviewEditorOpened;
-            _review = null;
-            base.OnUnloaded(e);
-        }
-
         protected override void OnDataContextChanged(EventArgs e)
         {
             base.OnDataContextChanged(e);
             _activePresenter = null;
-            if (IsLoaded)
-                ConnectReview();
-        }
-
-        private void ConnectReview()
-        {
-            if (_review != null)
-                _review.EditorOpened -= OnReviewEditorOpened;
-            _review = (DataContext as ViewModels.TextDiffContext)?.Review;
-            if (_review != null)
-                _review.EditorOpened += OnReviewEditorOpened;
-        }
-
-        private void OnReviewEditorOpened(object sender, EventArgs e)
-        {
-            _openingReviewEditor = true;
-            Dispatcher.UIThread.Post(() =>
-            {
-                _openingReviewEditor = false;
-                if (!IsLoaded || _review?.IsEditing != true)
-                    return;
-                var presenter = FindActivePresenter();
-                if (presenter?.FindReviewAnchorLine() == 0)
-                    presenter = this.GetVisualDescendants().OfType<ThemedTextDiffPresenter>().FirstOrDefault(x => x.FindReviewAnchorLine() > 0) ?? presenter;
-                if (presenter != null)
-                {
-                    RememberPresenter(presenter);
-                    var line = presenter.FindReviewAnchorLine();
-                    if (line > 0 && !presenter.TryGetReviewBounds(out _))
-                        presenter.ScrollToLine(line);
-                }
-                QueueReviewLayout();
-            }, DispatcherPriority.Loaded);
-        }
-
-        public static double CalculateEditorTop(double targetTop, double editorHeight, double viewportHeight) =>
-            Math.Clamp(targetTop, 0, Math.Max(0, viewportHeight - editorHeight));
-
-        public void QueueReviewLayout()
-        {
-            if (_reviewLayoutQueued || !IsLoaded)
-                return;
-            _reviewLayoutQueued = true;
-            Dispatcher.UIThread.Post(() =>
-            {
-                _reviewLayoutQueued = false;
-                UpdateReviewLayout();
-            }, DispatcherPriority.Loaded);
-        }
-
-        private void UpdateReviewLayout()
-        {
-            if (_openingReviewEditor || !IsLoaded || _review?.IsEditing != true)
-                return;
-            var presenters = this.GetVisualDescendants().OfType<ThemedTextDiffPresenter>().Where(x => x.FindReviewAnchorLine() > 0).ToList();
-            var top = 0.0;
-            if (presenters.Count > 0)
-            {
-                var visible = presenters.Select(x => x.TryGetReviewBounds(out var bounds) ? (Rect?)bounds : null).Where(x => x.HasValue).ToList();
-                if (visible.Count == 0)
-                {
-                    if (presenters.All(x => x.IsReviewViewportReady))
-                        _review.CloseEditor();
-                    return;
-                }
-                top = visible.Min(x => x.Value.Top);
-            }
-            var height = ReviewEditor.DesiredSize.Height;
-            top = CalculateEditorTop(top, height, Bounds.Height);
-            var right = DataContext is ViewModels.TwoSideTextDiff && _activePresenter?.IsOld == true ?
-                Bounds.Width * 0.5 + ReviewEditorRightMargin : ReviewEditorRightMargin;
-            ReviewEditor.Width = Math.Min(MaxReviewEditorWidth, Math.Max(0, Bounds.Width - right));
-            ReviewEditor.Margin = new Thickness(0, top, right, 0);
-            ReviewEditor.MaxHeight = Math.Max(0, Bounds.Height - top);
         }
 
         private void OnAddReviewComment(object sender, RoutedEventArgs e)

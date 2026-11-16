@@ -134,9 +134,5 @@
         </TextBlock>
       </Button>
     </StackPanel>
-    <Border x:Name="ReviewEditor" Width="360" HorizontalAlignment="Right" VerticalAlignment="Top"
-            IsVisible="{Binding Review.IsEditing, FallbackValue=False, TargetNullValue=False}" Effect="drop-shadow(0 0 8 #80000000)">
-      <v:ReviewCommentEditor DataContext="{Binding Review}"/>
-    </Border>
   </Grid>
 </UserControl>

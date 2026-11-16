@@ -19,7 +19,15 @@ not ignore. Reviews manages saved reviews and snapshots rather than providing
 another source-creation form. Without saved work, it shows an empty state and
 does not automatically start a local source.
 
-The file list loads paths and status before file contents. Selecting a file
+The file list is the same change tree used by Local changes, with Tree, Grid,
+and List modes and remembered folder expansion. The text filter matches
+repository-relative paths and combines with All files, Reviewed, and Unreviewed.
+Each file row shows one review mark after its name: a fix glyph and the open
+count when the file has tofix findings, a check glyph when it has comments and
+no tofix findings, and no mark when it has no comments. Folders do not aggregate
+their children's marks.
+
+The file tree loads paths and status before file contents. Selecting a file
 loads its diff asynchronously. Selecting another file cancels obsolete loading.
 Unreviewed local files are live previews and reload when selected again. Opening
 or browsing a preview does not create review files.
@@ -31,17 +39,14 @@ from persisted comment excerpts; loading a complete diff does not save it.
 
 The comparison label uses Staged changes, Unstaged changes, or All local changes
 for local sources. Commit sources show selectable revision endpoints. The
-selected file's absolute path is selectable above the diff. File-list context
-menus provide Copy Path for the repository-relative path and Copy Full Path for
-the absolute path. Long list paths truncate from the left and align right to
-preserve filenames.
+diff header also shows the selected file's added and deleted line counts. The
+selected file's absolute path is selectable above the diff.
 
-The text filter matches repository-relative paths. All files, Reviewed, and
-Unreviewed filters combine with it. Reviewed means at least one nonempty comment,
-including fixed or dismissed comments. Unreviewed means no nonempty comments.
-The selected file stays visible while its comment editor is active; membership
-updates when the editor closes, so adding a first comment or removing the last
-comment does not interrupt typing.
+The Reviewed filter means at least one nonempty comment, including fixed or
+dismissed comments. Unreviewed means no nonempty comments. The selected file
+stays visible while its comment panel is active; membership updates when the
+editor closes, so adding a first comment or removing the last comment does not
+interrupt typing.
 
 A comment records the selected file's identity. Code already associated with
 review work does not reload silently. Update snapshot
@@ -55,18 +60,24 @@ code or attaching them to unverified lines.
 
 ## Write the review
 
-General Review uses the commit-message editor. Its first line is the review
-subject; a blank line separates the subject from the body. The section can be
-collapsed. Commit and comparison subjects supply the initial subject and appear
-in the snapshot selector with revision and date information.
+Editing happens in one docked panel below the diff with three tabs: Comment,
+File comment, and General review. There is no floating editor. Opening a comment
+selects its tab and focuses its editor. Escape returns focus to the diff, so the
+whole review is reachable from the keyboard.
+
+General review uses the commit-message editor. Its first line is the review
+subject; a blank line separates the subject from the body. Commit and comparison
+subjects supply the initial subject and appear in the snapshot selector with
+revision and date information.
 
 Comment records the current line when no text is selected. Comment on selection
 records the selected source range with surrounding context. Hovering a commented
-line offers Edit comment instead of creating another finding. Add file comment
-records a finding about the file without capturing its entire diff. General
-review text and comments use the same editor as commit messages. Comments omit
-commit-subject decorations. Typing preserves text, blank lines, and caret state.
-Closing an empty or whitespace-only comment removes it.
+line offers Edit comment instead of creating another finding. Changing the diff
+selection does not close or retarget a tab while its text is nonempty; it only
+follows the selection while the tab is empty. General review text and comments
+use the same editor as commit messages. Comments omit commit-subject
+decorations. Typing preserves text, blank lines, and caret state. Closing an
+empty or whitespace-only comment removes it.
 
 Comment states are fixed:
 
@@ -76,10 +87,36 @@ Comment states are fixed:
 - dismissed identifies a finding that requires no action.
 
 Files have no separate manual reviewed mark or progress state. Removing the last
-nonempty comment makes a file unreviewed. Mark remaining comments fixed affects
-comment and tofix entries in the selected file. Set all comments applies the
-selected state to every comment in that file, including comments outside the
-current diff. Undo restores the preceding states.
+nonempty comment makes a file unreviewed. A file has at most one file-level
+comment, edited from the File comment tab or from Edit file comment.
+
+## File context menu
+
+The file tree uses the standard change-list selection, including multi-select.
+Review commands come first, then the standard file commands.
+
+- Edit file comment opens the file-level comment. It is available only when one
+  file is selected.
+- Mark as OK stores one dismissed file comment with the text OK, which makes the
+  file reviewed quickly. It is available only when no selected file has a tofix
+  comment. Otherwise the item is disabled and its label names the count.
+- Set all comments applies comment, tofix, fixed, or dismissed to every comment
+  in every selected file, including comments outside the current diff.
+
+State changes are immediate and cannot be undone.
+
+Save as Patch and Copy as Patch use the selected files' complete patches. They
+are available only when every selected file has loaded full source, so a
+recorded-context-only file is never exported as a patch that would not apply.
+
+Open, Reveal, File History, Blame, and custom file actions are available only for
+local staged, unstaged, or all-local sources whose current file still matches
+the recorded code. Commit and comparison reviews act on recorded revisions, so
+they do not offer actions that would read or modify a working file. Staging,
+discarding, and stashing are never offered inside Reviews.
+
+Copy Path copies the repository-relative path and Copy Full Path copies the
+absolute path, for every selected file.
 
 ## Navigate and update
 
@@ -103,11 +140,8 @@ Review shortcuts are active only inside Reviews:
 The comment shortcut also accepts Command on macOS. Boundary navigation does not
 intercept normal text navigation inside a comment or general-review editor.
 
-Comment actions appear at the target's top, clamped to the visible viewport. The
-editor remains attached to the commented code as the diff scrolls. It moves
-inside the viewport when the target is only partly visible or near the bottom.
-Changing the diff selection or scrolling the target completely out of view closes
-the editor without discarding nonempty comments. Mixed targets display both old
+The comments list sits below the file tree and is collapsed by default. Its
+header shows the selected file's comment count. A mixed target displays both old
 and new source ranges.
 
 Updating preserves comment IDs and workflow states. Unambiguous unchanged ranges
@@ -128,13 +162,17 @@ has two files under `<review_id>/`:
 - `review.md` presents the saved subject, general notes, findings, states,
   locations, and relevant code context as readable text.
 - `review.xml` retains compact metadata, anchors, and history for actual review
-  work. The application uses this file when reopening the review.
+  work. The application uses this file when reopening the review. It is the
+  authoritative file; `review.md` is a presentation, not an input. Editing
+  comment text or state in `review.xml` is effective, while changing recorded
+  code context also requires updating its capture hash.
 
 Untouched files are not persisted. A line comment retains bounded surrounding
 context, even inside a large patch hunk. Selecting a complete section retains
-that section and its surrounding context. General-only reviews do not capture file data. Full source files and per-file
-snapshot documents are not written. Saved context remains readable without the
-original Git objects or current working files.
+that section and its surrounding context. General-only reviews do not capture
+file data. A file marked OK persists one dismissed file comment. Full source
+files and per-file snapshot documents are not written. Saved context remains
+readable without the original Git objects or current working files.
 
 Copy Review copies the subject, general notes, and active comment and tofix
 findings. Each finding precedes its location and relevant code context. It does

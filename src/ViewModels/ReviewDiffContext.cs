@@ -18,23 +18,54 @@ namespace SourceGit.ViewModels
         New,
     }
 
-    public sealed class ReviewFileItem(Models.ReviewFile file, Models.ReviewFile sourceFile) : ObservableObject
+    public sealed class ReviewFileItem : ObservableObject
     {
-        public Models.ReviewFile Data { get; } = file;
-        public Models.ReviewFile SourceFile { get; } = sourceFile;
-        public bool IsRecordedContext { get; set; } = sourceFile == null;
+        public ReviewFileItem(Models.ReviewFile file, Models.ReviewFile sourceFile)
+        {
+            Data = file;
+            SourceFile = sourceFile;
+            IsRecordedContext = sourceFile == null;
+            Change = new Models.Change
+            {
+                Path = file.Path,
+                OriginalPath = file.OldPath,
+                Index = GetChangeState(file),
+            };
+            RefreshMark();
+        }
+
+        public Models.ReviewFile Data { get; }
+        public Models.ReviewFile SourceFile { get; }
+        public Models.Change Change { get; }
+        public bool IsRecordedContext { get; set; } = false;
         public Models.ReviewFile DisplayFile => IsRecordedContext ? Data : SourceFile;
         public string Path => Data.Path;
-        public string ReviewStatus => Data.IsOutsideDiff ? App.Text("Reviews.Attachment.OutsideDiff") :
-            App.Text(Data.HasReviewWork ? "Reviews.Filter.Reviewed" : "Reviews.Filter.Unreviewed");
-        public string CommentCount => App.Text("Reviews.CommentCounts", Data.Comments.Count,
-            Data.Comments.FindAll(x => x.State == Models.ReviewCommentState.Comment).Count,
-            Data.Comments.FindAll(x => x.State == Models.ReviewCommentState.ToFix).Count);
 
-        public void Refresh()
+        public void RefreshMark()
         {
-            OnPropertyChanged(nameof(ReviewStatus));
-            OnPropertyChanged(nameof(CommentCount));
+            var toFix = 0;
+            var comments = 0;
+            foreach (var comment in Data.Comments)
+            {
+                if (string.IsNullOrWhiteSpace(comment.Body))
+                    continue;
+                comments++;
+                if (comment.State == Models.ReviewCommentState.ToFix)
+                    toFix++;
+            }
+            Change.ReviewToFixCount = toFix;
+            Change.HasReviewComments = comments > 0;
+        }
+
+        private static Models.ChangeState GetChangeState(Models.ReviewFile file)
+        {
+            if (file.OldPath.Length > 0 && file.OldPath != file.Path)
+                return Models.ChangeState.Renamed;
+            if (file.IsUntracked)
+                return Models.ChangeState.Added;
+            if (file.IsLoaded && file.IsBinary == false && file.OldContent.Length > 0 && file.NewContent.Length == 0)
+                return Models.ChangeState.Deleted;
+            return Models.ChangeState.Modified;
         }
     }
 
@@ -68,6 +99,7 @@ namespace SourceGit.ViewModels
         private readonly Reviews _owner;
         private readonly Models.ReviewFile _file;
         private readonly Models.ReviewFile _sourceFile;
+        private readonly bool _fileCommentsOnly;
         private Models.ReviewComment _comment;
         private Models.ReviewAnchor _draft;
         private string _body = string.Empty;
@@ -140,15 +172,22 @@ namespace SourceGit.ViewModels
             }
         }
 
-        public ReviewDiffContext(Reviews owner, Models.ReviewFile file, Models.ReviewFile sourceFile)
+        public ReviewDiffContext(Reviews owner, Models.ReviewFile file, Models.ReviewFile sourceFile, bool fileCommentsOnly = false)
         {
             _owner = owner;
             _file = file;
             _sourceFile = sourceFile;
+            _fileCommentsOnly = fileCommentsOnly;
         }
 
         public void BeginFileComment()
         {
+            var existing = _file.Comments.Find(x => x.Anchor.Side == Models.ReviewSide.File);
+            if (existing != null)
+            {
+                EditComment(existing);
+                return;
+            }
             BeginComment(new Models.ReviewAnchor
             {
                 Side = Models.ReviewSide.File,
@@ -164,19 +203,26 @@ namespace SourceGit.ViewModels
             _draft = anchor;
             _body = string.Empty;
             _state = Models.ReviewCommentState.ToFix;
-            _owner.SelectComment(null);
+            if (!_fileCommentsOnly)
+                _owner.SelectComment(null);
             Refresh();
             EditorOpened?.Invoke(this, EventArgs.Empty);
+            _owner.NotifyEditorOpened(this);
         }
 
         public void EditComment(Models.ReviewComment comment)
         {
+            if (_fileCommentsOnly && comment != null && comment.Anchor.Side != Models.ReviewSide.File)
+                return;
             _comment = comment;
             _draft = null;
             _owner.SelectComment(comment);
             Refresh();
             if (comment != null)
+            {
                 EditorOpened?.Invoke(this, EventArgs.Empty);
+                _owner.NotifyEditorOpened(this);
+            }
         }
 
         public void CloseEditor()
@@ -185,8 +231,11 @@ namespace SourceGit.ViewModels
                 _owner.RemoveComment(_file, _comment);
             _comment = null;
             _draft = null;
-            _owner.ClearCommentSelection();
-            _owner.CancelReattach();
+            if (!_fileCommentsOnly)
+            {
+                _owner.ClearCommentSelection();
+                _owner.CancelReattach();
+            }
             Refresh();
             _owner.RefreshFileFilter();
         }
@@ -225,6 +274,8 @@ namespace SourceGit.ViewModels
 
         public void OpenComment(Models.TextDiff data, TextDiffSelectedChunk chunk, bool hasSelection)
         {
+            if (_fileCommentsOnly)
+                return;
             if (!hasSelection && !_owner.HasPendingReattach && chunk.StartIdx == chunk.EndIdx && chunk.StartIdx >= 0 && chunk.StartIdx < data.Lines.Count)
             {
                 var pane = chunk.Combined ? ReviewPane.Combined : chunk.IsOldSide ? ReviewPane.Old : ReviewPane.New;

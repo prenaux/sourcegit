@@ -217,6 +217,9 @@ namespace SourceGit.Models
         public TreeExpansionState TagTreeExpansion { get; set; } = new();
         public TreeExpansionState SubmoduleTreeExpansion { get; set; } = new();
         public TreeExpansionState RevisionFileTreeExpansion { get; set; } = new();
+        public TreeExpansionState ReviewFileTreeExpansion { get; set; } = new();
+        public ChangeViewMode ReviewFileViewMode { get; set; } = ChangeViewMode.Tree;
+        public bool ReviewCommentsExpanded { get; set; }
 
         public string LastCommitMessage
         {

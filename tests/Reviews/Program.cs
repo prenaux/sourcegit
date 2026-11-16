@@ -31,7 +31,9 @@ namespace SourceGit.ReviewTests
             Directory.CreateDirectory(s_root);
             Directory.SetCurrentDirectory(s_root);
             s_lifetime = new Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-            AppBuilder.Configure<Application>().UseHeadless(new AvaloniaHeadlessPlatformOptions()).SetupWithLifetime(s_lifetime);
+            AppBuilder.Configure<Application>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions())
+                .SetupWithLifetime(s_lifetime);
             SourceGit.Native.OS.GitExecutable = "git";
 
             var tests = new (string Name, Action Run)[]
@@ -52,7 +54,7 @@ namespace SourceGit.ReviewTests
                 (nameof(ExportOnlyActiveCommentsWithHonestAnchors), ExportOnlyActiveCommentsWithHonestAnchors),
                 (nameof(SaveOnlyAfterReviewInteraction), SaveOnlyAfterReviewInteraction),
                 (nameof(KeepReviewedMembershipAcrossCommentStateChanges), KeepReviewedMembershipAcrossCommentStateChanges),
-                (nameof(UndoWholeFileStateChanges), UndoWholeFileStateChanges),
+                (nameof(SetSelectedCommentsStateAppliesToTheWholeFile), SetSelectedCommentsStateAppliesToTheWholeFile),
                 (nameof(ReattachWithoutLosingOriginalContext), ReattachWithoutLosingOriginalContext),
                 (nameof(DisableStagingInBothReviewLayouts), DisableStagingInBothReviewLayouts),
                 (nameof(AnchorDeletedRangesOnTheOldSide), AnchorDeletedRangesOnTheOldSide),
@@ -78,9 +80,15 @@ namespace SourceGit.ReviewTests
                 (nameof(ShowBothSourceRangesForMixedComments), ShowBothSourceRangesForMixedComments),
                 (nameof(NavigateSectionBoundariesBeforeOtherSections), NavigateSectionBoundariesBeforeOtherSections),
                 (nameof(EditHoveredCommentsWithoutDuplicatingFindings), EditHoveredCommentsWithoutDuplicatingFindings),
-                (nameof(ClampEditorPlacementToTheViewport), ClampEditorPlacementToTheViewport),
                 (nameof(MeasureSharedEditorsAndPreserveTyping), MeasureSharedEditorsAndPreserveTyping),
-                (nameof(AnchorEditorsAndCloseOnSelectionOrScroll), AnchorEditorsAndCloseOnSelectionOrScroll),
+                (nameof(KeepDockedCommentEditorAcrossNavigation), KeepDockedCommentEditorAcrossNavigation),
+                (nameof(TrackReviewMarksInTheFileTree), TrackReviewMarksInTheFileTree),
+                (nameof(KeepOneActiveFileWhileSelectingMultipleFiles), KeepOneActiveFileWhileSelectingMultipleFiles),
+                (nameof(MarkFileAsOkOnlyWithoutToFixComments), MarkFileAsOkOnlyWithoutToFixComments),
+                (nameof(ReuseTheSingleFileComment), ReuseTheSingleFileComment),
+                (nameof(ShowDiffStatsForTheSelectedFile), ShowDiffStatsForTheSelectedFile),
+                (nameof(ExportOnlyLoadedPatches), ExportOnlyLoadedPatches),
+                (nameof(SwitchTabsForCommentTargets), SwitchTabsForCommentTargets),
                 (nameof(ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff), ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff),
                 (nameof(ReopenHistoryReviewWithUncommentedSections), ReopenHistoryReviewWithUncommentedSections),
                 (nameof(OpenReviewAndSnapshotSelectorsWithFullSources), OpenReviewAndSnapshotSelectorsWithFullSources),
@@ -337,15 +345,14 @@ namespace SourceGit.ReviewTests
             snapshot.Files[0].Comments.Add(CreateComment(snapshot, 2));
             page.OpenPreview(snapshot);
             page.ReviewFilter = ReviewFileFilter.Reviewed;
-            page.ResolveRemainingComments();
+            page.SetSelectedCommentsState(ReviewCommentState.Fixed);
             Check(page.Files.Count == 1 && snapshot.Files[0].Comments[0].State == ReviewCommentState.Fixed,
                 "Fixing a finding must keep its file reviewed because the comment still exists.");
-            page.BulkState = ReviewCommentState.Dismissed;
-            page.SetAllCommentStates();
+            page.SetSelectedCommentsState(ReviewCommentState.Dismissed);
             Check(page.Files.Count == 1, "Dismissed comments must still count as review work.");
         }
 
-        private static void UndoWholeFileStateChanges()
+        private static void SetSelectedCommentsStateAppliesToTheWholeFile()
         {
             using var page = new Reviews(CreateDirectory());
             var snapshot = CreateSnapshot("a\nb\nc\n");
@@ -357,14 +364,13 @@ namespace SourceGit.ReviewTests
                 snapshot.Files[0].Comments.Add(comment);
             }
             page.OpenPreview(snapshot);
-            page.FileFilter = "file";
-            page.ResolveRemainingComments();
-            Check(snapshot.Files[0].Comments[0].State == ReviewCommentState.Fixed && snapshot.Files[0].Comments[2].State == ReviewCommentState.Dismissed, "Resolve remaining must include out-of-diff comments but preserve dismissed findings.");
-            page.UndoCommentStates();
-            Check(snapshot.Files[0].Comments[0].State == ReviewCommentState.Comment && snapshot.Files[0].Comments[1].State == ReviewCommentState.ToFix, "Whole-file changes must support undo.");
-            page.BulkState = ReviewCommentState.ToFix;
-            page.SetAllCommentStates();
-            Check(snapshot.Files[0].Comments.All(x => x.State == ReviewCommentState.ToFix), "Explicit Set all must apply to every comment in the file.");
+            page.SetSelectedCommentsState(ReviewCommentState.Fixed);
+            Check(snapshot.Files[0].Comments.All(x => x.State == ReviewCommentState.Fixed),
+                "Set all comments must include comments outside the current diff.");
+            page.SetSelectedCommentsState(ReviewCommentState.ToFix);
+            Check(snapshot.Files[0].Comments.All(x => x.State == ReviewCommentState.ToFix),
+                "Set all comments must apply the selected state to every comment in the file.");
+            Check(page.SelectedToFixCount == 3, "The selected file must report its open tofix comments.");
         }
 
         private static void ReattachWithoutLosingOriginalContext()
@@ -556,7 +562,7 @@ namespace SourceGit.ReviewTests
             var view = new SourceGit.Views.TextDiffView { DataContext = page.Diff };
             view.DataContext = ordinary;
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-            Check(!view.FindControl<Avalonia.Controls.Border>("ReviewEditor").IsVisible, "The comment editor must be hidden outside Reviews.");
+            Check(view.FindControl<Avalonia.Controls.Border>("ReviewEditor") == null, "Ordinary diffs must not host a review editor.");
         }
 
         private static void PersistOnlyReviewedItems()
@@ -873,14 +879,6 @@ namespace SourceGit.ReviewTests
             Check(page.Comments.Count == 2, "An explicit new selection must still support another finding on the same line.");
         }
 
-        private static void ClampEditorPlacementToTheViewport()
-        {
-            Check(SourceGit.Views.TextDiffView.CalculateEditorTop(100, 200, 500) == 100, "Visible targets must retain their top anchor.");
-            Check(SourceGit.Views.TextDiffView.CalculateEditorTop(-50, 200, 500) == 0, "Partially visible targets must clamp to the viewport top.");
-            Check(SourceGit.Views.TextDiffView.CalculateEditorTop(450, 200, 500) == 300, "Editors must move upward when the target is near the viewport bottom.");
-            Check(SourceGit.Views.TextDiffView.CalculateEditorTop(100, 600, 500) == 0, "Oversized editors must remain inside the viewport.");
-        }
-
         private static bool s_reviewStylesLoaded;
 
         private static void EnsureReviewStyles()
@@ -926,16 +924,16 @@ namespace SourceGit.ReviewTests
             snapshot.Source = ReviewSourceKind.Commit;
             page.OpenPreview(snapshot);
             page.UseSideBySide = false;
-            page.IsGeneralExpanded = true;
+            page.ActiveTabIndex = 2;
             var window = OpenReviewWindow(page);
             try
             {
                 var view = (SourceGit.Views.Reviews)window.Content;
-                var section = view.FindControl<Grid>("GeneralReviewSection");
-                var frame = view.FindControl<Border>("GeneralReviewEditorFrame");
+                var tabs = view.FindControl<TabControl>("EditorTabs");
                 var editor = view.FindControl<SourceGit.Views.CommitMessageTextEditor>("GeneralReviewEditor");
-                Check(frame.Bounds.Width > 500 && Math.Abs(frame.Bounds.Width - section.Bounds.Width) < 1 && editor.Bounds.Width >= frame.Bounds.Width - 3,
-                    "General Review and its editor must stretch across the entire available pane.");
+                PumpLayout(window);
+                Check(tabs.Bounds.Width > 500 && editor.Bounds.Width > tabs.Bounds.Width * 0.5,
+                    "The general review editor must fill the docked tab panel.");
                 editor.TextArea.Selection = AvaloniaEdit.Editing.Selection.Create(editor.TextArea, 0, editor.Document.TextLength);
                 editor.TextArea.PerformTextInput("Subject\n\nBody");
                 foreach (var text in new[] { "\n", "\n", "next line", "\n" })
@@ -957,7 +955,7 @@ namespace SourceGit.ReviewTests
             }
         }
 
-        private static void AnchorEditorsAndCloseOnSelectionOrScroll()
+        private static void KeepDockedCommentEditorAcrossNavigation()
         {
             using var page = new Reviews(CreateDirectory());
             var snapshot = CreateSnapshot(string.Join('\n', Enumerable.Range(1, 180).Select(x => $"line_{x}")) + "\n");
@@ -974,10 +972,10 @@ namespace SourceGit.ReviewTests
                 diff.RememberPresenter(presenter);
                 page.Context.OpenComment(page.Diff.Data, chunk, false);
                 PumpLayout(window);
-                var floating = diff.FindControl<Border>("ReviewEditor");
-                var body = floating.FindDescendantOfType<SourceGit.Views.ReviewCommentEditor>()
-                    .FindControl<SourceGit.Views.CommitMessageTextEditor>("BodyEditor");
-                body.TextArea.PerformTextInput("anchored finding");
+                Check(page.ActiveTabIndex == 0, "A comment target must open the Comment tab.");
+                var editor = view.FindControl<SourceGit.Views.ReviewCommentEditor>("CommentEditor");
+                var body = editor.FindControl<SourceGit.Views.CommitMessageTextEditor>("BodyEditor");
+                body.TextArea.PerformTextInput("docked finding");
                 foreach (var text in new[] { "\n", "\n", "continued" })
                 {
                     var inserted = text == "\n" ? Environment.NewLine : text;
@@ -985,41 +983,21 @@ namespace SourceGit.ReviewTests
                     body.TextArea.PerformTextInput(text);
                     PumpLayout(window);
                     Check(body.Text == expected && page.Context.Body == expected && body.CaretOffset == expected.Length,
-                        $"Inline typing: text={body.Text.Replace("\n", "<LF>", StringComparison.Ordinal)}, expected={expected.Replace("\n", "<LF>", StringComparison.Ordinal)}, body={page.Context.Body.Replace("\n", "<LF>", StringComparison.Ordinal)}, caret={body.CaretOffset}, length={expected.Length}, editing={page.Context.IsEditing}.");
+                        "Typing in the docked editor must preserve text and caret position.");
                 }
                 var finding = page.Context.Body;
-                PumpLayout(window);
-                Check(presenter.TryGetReviewBounds(out var bounds) && Math.Abs(floating.Margin.Top - SourceGit.Views.TextDiffView.CalculateEditorTop(bounds.Top, floating.DesiredSize.Height, diff.Bounds.Height)) < 1,
-                    "The editor must be positioned from the commented code, not an arbitrary pointer or viewport offset.");
-                var editor = floating.FindDescendantOfType<SourceGit.Views.ReviewCommentEditor>();
-                editor.FocusEditor();
-                editor.FindControl<SourceGit.Views.CommitMessageTextEditor>("BodyEditor").TextArea.RaiseEvent(new Avalonia.Input.KeyEventArgs
-                {
-                    RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent,
-                    Key = Avalonia.Input.Key.Escape,
-                });
-                PumpLayout(window);
-                Check(!page.Context.IsEditing && presenter.IsKeyboardFocusWithin, "Escape must close the editor and return keyboard focus to the diff.");
-                page.Context.OpenComment(page.Diff.Data, chunk, false);
-                PumpLayout(window);
                 presenter.TextArea.Selection = AvaloniaEdit.Editing.Selection.Create(presenter.TextArea,
                     presenter.Document.GetLineByNumber(12).Offset, presenter.Document.GetLineByNumber(13).Offset);
-                Check(!page.Context.IsEditing && page.Comments.Single().Body == finding, "Changing the diff selection must close the editor without losing a finding.");
-                presenter.TextArea.ClearSelection();
-                page.Context.OpenComment(page.Diff.Data, chunk, false);
                 PumpLayout(window);
+                Check(page.Context.IsEditing && page.Context.Body == finding,
+                    "Changing the diff selection must not close or retarget a nonempty comment.");
                 presenter.ScrollToLine(160);
                 PumpLayout(window);
-                Check(!page.Context.IsEditing, "Scrolling the commented range completely out of view must close its editor.");
-                var section = page.Diff.CreateReviewSelection(ReviewPane.Combined, 20, 100);
-                page.Context.OpenComment(page.Diff.Data, section, true);
-                page.Context.Body = "partially visible section";
-                PumpLayout(window);
-                var scroller = presenter.FindDescendantOfType<ScrollViewer>();
-                scroller.Offset = new Vector(scroller.Offset.X, presenter.TextArea.TextView.DefaultLineHeight * 50);
-                PumpLayout(window);
-                Check(page.Context.IsEditing && Math.Abs(floating.Margin.Top) < 1,
-                    $"Partial target: editing={page.Context.IsEditing}, top={floating.Margin.Top}, offset={scroller.Offset.Y}, first={presenter.TextArea.TextView.VisualLines[0].FirstDocumentLine.LineNumber}.");
+                Check(page.Context.IsEditing && page.Context.Body == finding,
+                    "Scrolling the commented range out of view must not close the docked editor.");
+                page.Context.CloseEditor();
+                Check(!page.Context.IsEditing && page.Comments.Single().Body == finding,
+                    "Closing the docked editor must keep the saved finding.");
             }
             finally
             {
@@ -1213,9 +1191,9 @@ namespace SourceGit.ReviewTests
                     "Commit ranges must remain selectable and copyable.");
                 Check(page.SelectedFileFullPath == Path.GetFullPath(Path.Combine(page.GetFullPath(string.Empty), commit.Files[0].Path)),
                     "The selected-file header must expose the full absolute path.");
-                var menu = view.CreateFileContextMenu(page.SelectedFile);
-                var copyPath = (MenuItem)menu.Items[0];
-                var copyFullPath = (MenuItem)menu.Items[1];
+                var menu = view.CreateFileContextMenu(page, view.FindControl<SourceGit.Views.ChangeCollectionView>("FileList"));
+                var copyPath = menu.Items.OfType<MenuItem>().First(x => (string)x.Header == App.Text("CopyPath"));
+                var copyFullPath = menu.Items.OfType<MenuItem>().First(x => (string)x.Header == App.Text("CopyFullPath"));
                 copyPath.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
                 var clipboard = App.GetClipboardTextAsync();
                 AwaitFileLoad(clipboard);
@@ -1224,15 +1202,145 @@ namespace SourceGit.ReviewTests
                 clipboard = App.GetClipboardTextAsync();
                 AwaitFileLoad(clipboard);
                 Check(clipboard.Result == page.SelectedFileFullPath, "Copy Full Path must copy the absolute path.");
-                var pathText = view.FindControl<ListBox>("FileList").GetVisualDescendants().OfType<TextBlock>().First(x => x.Text == commit.Files[0].Path);
-                Check(ReferenceEquals(pathText.TextTrimming, Avalonia.Media.TextTrimming.LeadingCharacterEllipsis) && pathText.TextAlignment == Avalonia.Media.TextAlignment.Right,
-                    "File paths must truncate from the left and align to the right so filenames remain visible.");
             }
             finally
             {
                 s_lifetime.MainWindow = previous;
                 window.Close();
             }
+        }
+
+        private static void TrackReviewMarksInTheFileTree()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\nc\n");
+            snapshot.Files[0].Path = "tofix.txt";
+            snapshot.Files[0].Comments.Add(CreateComment(snapshot, 1));
+            snapshot.Files.Add(new ReviewFile { Path = "done.txt", Comments = [new ReviewComment { Body = "ok", State = ReviewCommentState.Fixed }] });
+            snapshot.Files.Add(new ReviewFile { Path = "open.txt" });
+            page.OpenPreview(snapshot);
+            var toFix = page.Files.Single(x => x.Path == "tofix.txt");
+            var done = page.Files.Single(x => x.Path == "done.txt");
+            var open = page.Files.Single(x => x.Path == "open.txt");
+            Check(toFix.Change.HasReviewToFix && toFix.Change.ReviewToFixCount == 1, "A file with open findings must show the fix count.");
+            Check(done.Change.IsReviewedWithoutToFix && !done.Change.HasReviewToFix, "A reviewed file without open findings must show the check mark.");
+            Check(!open.Change.HasReviewComments && !open.Change.IsReviewedWithoutToFix, "An unreviewed file must show no review mark.");
+            Check(page.Changes.Contains(open.Change), "The tree must use the same change instances as the selection model.");
+            page.SelectedChanges = [open.Change];
+            page.Context.BeginFileComment();
+            page.Context.Body = "new finding";
+            Check(open.Change.HasReviewToFix && open.Change.ReviewToFixCount == 1, "Adding a tofix comment must update the tree mark.");
+            page.Context.State = ReviewCommentState.Comment;
+            Check(open.Change.IsReviewedWithoutToFix && !open.Change.HasReviewToFix, "A comment-only file must show the reviewed mark.");
+        }
+
+        private static void KeepOneActiveFileWhileSelectingMultipleFiles()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\n");
+            snapshot.Files[0].Path = "first.txt";
+            snapshot.Files.Add(new ReviewFile { Path = "second.txt" });
+            snapshot.Files.Add(new ReviewFile { Path = "third.txt" });
+            page.OpenPreview(snapshot);
+            var first = page.Files.Single(x => x.Path == "first.txt");
+            var second = page.Files.Single(x => x.Path == "second.txt");
+            page.SelectedChanges = [first.Change];
+            Check(ReferenceEquals(page.SelectedFile, first), "A single selected row must become the active file.");
+            page.SelectedChanges = [first.Change, second.Change];
+            Check(ReferenceEquals(page.SelectedFile, first) && page.SelectedFileItems.Count == 2,
+                "Multi-select must keep the active file and report every selected file.");
+            page.SelectedChanges = [second.Change];
+            Check(ReferenceEquals(page.SelectedFile, second), "A new single selection must move the active file.");
+            page.FileFilter = "third";
+            Check(page.Files.Count == 1 && page.SelectedFile != null && page.Files[0].Path == "third.txt",
+                "Filtering must keep exactly one active file from the remaining rows.");
+        }
+
+        private static void MarkFileAsOkOnlyWithoutToFixComments()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\n");
+            snapshot.Files.Add(new ReviewFile { Path = "open.txt" });
+            snapshot.Files.Add(new ReviewFile { Path = "blocked.txt", Comments = [new ReviewComment { Body = "fix me" }] });
+            page.OpenPreview(snapshot);
+            var open = page.Files.Single(x => x.Path == "open.txt");
+            var blocked = page.Files.Single(x => x.Path == "blocked.txt");
+            page.SelectedChanges = [open.Change];
+            Check(page.CanMarkFilesAsOk, "A file without open findings must allow Mark as OK.");
+            page.MarkFilesAsOk();
+            var ok = open.Data.Comments.Single();
+            Check(ok.Body == "OK" && ok.State == ReviewCommentState.Dismissed, "Mark as OK must store a dismissed file comment with the OK text.");
+            Check(open.Change.IsReviewedWithoutToFix, "A file marked OK must count as reviewed.");
+            page.ReviewFilter = ReviewFileFilter.Unreviewed;
+            Check(page.Files.All(x => x.Path != "open.txt"), "A file marked OK must leave the Unreviewed filter.");
+            page.ReviewFilter = ReviewFileFilter.All;
+            page.SelectedChanges = [blocked.Change];
+            Check(!page.CanMarkFilesAsOk && page.SelectedToFixCount == 1, "A file with open findings must block Mark as OK and report the count.");
+            page.SelectedChanges = [open.Change, blocked.Change];
+            Check(!page.CanMarkFilesAsOk, "A mixed selection must disable Mark as OK as a unit.");
+        }
+
+        private static void ReuseTheSingleFileComment()
+        {
+            using var page = new Reviews(CreateDirectory());
+            page.OpenPreview(CreateSnapshot("a\nb\n"));
+            page.OpenFileComment();
+            Check(page.ActiveTabIndex == 1 && page.FileContext.IsEditing, "Edit file comment must open the File comment tab.");
+            page.FileContext.Body = "first comment";
+            page.FileContext.CloseEditor();
+            page.OpenFileComment();
+            Check(page.FileContext.Body == "first comment", "Edit file comment must reopen the same file comment.");
+            page.FileContext.Body = "second comment";
+            page.FileContext.CloseEditor();
+            var file = page.Files[0].Data;
+            Check(file.Comments.Count(x => x.Anchor.Side == ReviewSide.File) == 1 && file.Comments.Single().Body == "second comment",
+                "A file must keep exactly one file-level comment.");
+            page.OpenFileComment();
+            page.FileContext.Body = string.Empty;
+            page.FileContext.CloseEditor();
+            Check(!file.HasReviewWork && !page.Files[0].Change.HasReviewComments, "Clearing the file comment must return the file to unreviewed.");
+        }
+
+        private static void ShowDiffStatsForTheSelectedFile()
+        {
+            using var page = new Reviews(CreateDirectory());
+            page.OpenPreview(CreateSnapshot("a\nb\nc\n"));
+            Check(page.Diff != null && page.AddedLines == 3 && page.DeletedLines == 0 && page.Diff.Data.AddedLines == 3,
+                "The diff header must report the selected file's added and deleted line counts.");
+        }
+
+        private static void ExportOnlyLoadedPatches()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\n");
+            snapshot.Files.Add(new ReviewFile { Path = "recorded_only.txt", Comments = [new ReviewComment { Body = "kept" }] });
+            page.OpenPreview(snapshot);
+            page.SelectedFile = page.Files.Single(x => x.Path == "recorded_only.txt");
+            Check(!page.CanExportPatch && page.GetSelectedPatchText().Length == 0,
+                "A recorded-context-only file must not export a patch that would not apply.");
+            page.SelectedFile = page.Files.Single(x => x.Path == "file.txt");
+            Check(page.CanExportPatch, "A loaded source file must allow patch export.");
+            var patch = page.GetSelectedPatchText();
+            Check(patch.StartsWith("diff --git", StringComparison.Ordinal) && patch.Contains("+a", StringComparison.Ordinal),
+                "Patch export must use the file's complete patch, not its comment context.");
+        }
+
+        private static void SwitchTabsForCommentTargets()
+        {
+            using var page = new Reviews(CreateDirectory());
+            page.OpenPreview(CreateSnapshot("a\nb\nc\nd\n"));
+            page.ActiveTabIndex = 2;
+            var chunk = page.Diff.CreateReviewSelection(ReviewPane.Combined, 2, 2);
+            page.Context.OpenComment(page.Diff.Data, chunk, false);
+            Check(page.ActiveTabIndex == 0 && page.Context.IsEditing, "A comment target must focus the Comment tab.");
+            page.Context.Body = "finding";
+            page.Context.CloseEditor();
+            page.ActiveTabIndex = 2;
+            page.SelectedComment = page.Comments.Single();
+            Check(page.ActiveTabIndex == 0 && page.Context.Body == "finding", "Selecting a comment must show it in the Comment tab.");
+            page.ActiveTabIndex = 2;
+            page.OpenFileComment();
+            Check(page.ActiveTabIndex == 1 && page.FileContext.IsEditing, "Edit file comment must focus the File comment tab.");
         }
 
         private static void SeparateChangedLocalSourcesFromRecordedContext()
@@ -1343,6 +1451,10 @@ namespace SourceGit.ReviewTests
                 "Reviews must not contain another source-creation selector.");
             Check(view.GetLogicalDescendants().OfType<CheckBox>().Count() == 1,
                 "Reviews must retain the diff layout toggle without adding a separate file-reviewed checkbox.");
+            Check(view.FindControl<SourceGit.Views.ChangeCollectionView>("FileList") != null,
+                "Reviews must use the regular change file list with its view modes and context menus.");
+            Check(view.FindControl<TabControl>("EditorTabs") != null,
+                "Reviews must keep its comment editing in one docked tab panel.");
         }
 
         private static void RemovingTheLastCommentMakesTheFileUnreviewed()

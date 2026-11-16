@@ -10,6 +10,8 @@ namespace SourceGit.Views
 {
     public class ChangeStatusIcon : Control
     {
+        private static readonly Typeface MARKER_TYPEFACE = CreateMarkerTypeface();
+
         private static readonly string[] INDICATOR = ["?", "±", "T", "+", "−", "➜", "❏", "★", "!"];
         private static readonly Color[] COLOR =
         [
@@ -47,7 +49,7 @@ namespace SourceGit.Views
             if (Change == null || Bounds.Width <= 0)
                 return;
 
-            var typeface = new Typeface("fonts:SourceGit#JetBrains Mono");
+            var typeface = MARKER_TYPEFACE;
 
             var idx = (int)(IsUnstagedChange ? Change.WorkTree : Change.Index);
             var indicator = INDICATOR[idx];
@@ -86,6 +88,12 @@ namespace SourceGit.Views
                 InvalidateVisual();
             else if (change.Property.Name == nameof(ActualThemeVariant) && change.NewValue != null)
                 InvalidateVisual();
+        }
+
+        private static Typeface CreateMarkerTypeface()
+        {
+            var typeface = new Typeface("fonts:SourceGit#JetBrains Mono");
+            return FontManager.Current.TryGetGlyphTypeface(typeface, out _) ? typeface : new Typeface(FontFamily.Default);
         }
     }
 }
