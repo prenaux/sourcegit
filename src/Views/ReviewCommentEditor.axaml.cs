@@ -9,7 +9,13 @@ namespace SourceGit.Views
     {
         private ViewModels.ReviewDiffContext _context;
 
-        public void FocusEditor() => BodyEditor.TextArea.Focus();
+        public void FocusEditor()
+        {
+            var area = BodyEditor.TextArea;
+            area.Focus();
+            area.Caret.Offset = area.Document.TextLength;
+            area.Caret.BringCaretToView();
+        }
 
         private void OnLostFocus(object sender, RoutedEventArgs e)
         {

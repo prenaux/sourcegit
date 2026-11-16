@@ -96,6 +96,7 @@ namespace SourceGit.ReviewTests
                 (nameof(FilterFilesByCommentState), FilterFilesByCommentState),
                 (nameof(AvoidConsecutiveMenuSeparators), AvoidConsecutiveMenuSeparators),
                 (nameof(FormatCommentRowsCompactly), FormatCommentRowsCompactly),
+                (nameof(FocusCommentEditorAtTheEnd), FocusCommentEditorAtTheEnd),
                 (nameof(SwitchTabsForCommentTargets), SwitchTabsForCommentTargets),
                 (nameof(ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff), ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff),
                 (nameof(ReopenHistoryReviewWithUncommentedSections), ReopenHistoryReviewWithUncommentedSections),
@@ -1551,6 +1552,31 @@ namespace SourceGit.ReviewTests
             row.Refresh();
             Check(row.Details.Contains("Needs attention", StringComparison.Ordinal),
                 "A comment that needs attention must still say so in the compact row.");
+        }
+
+        private static void FocusCommentEditorAtTheEnd()
+        {
+            using var page = new Reviews(CreateDirectory());
+            var snapshot = CreateSnapshot("a\nb\nc\n");
+            var comment = CreateComment(snapshot, 2);
+            comment.Body = "first line\nsecond line";
+            snapshot.Files[0].Comments.Add(comment);
+            page.OpenPreview(snapshot);
+            var window = OpenReviewWindow(page);
+            try
+            {
+                var view = (SourceGit.Views.Reviews)window.Content;
+                page.SelectedComment = page.Comments.Single();
+                PumpLayout(window);
+                var editor = view.FindControl<SourceGit.Views.ReviewCommentEditor>("CommentEditor");
+                var body = editor.FindControl<SourceGit.Views.CommitMessageTextEditor>("BodyEditor");
+                Check(body.Text == "first line\nsecond line" && body.TextArea.Caret.Offset == body.Text.Length,
+                    "Focusing a comment editor must place the caret at the end of its text.");
+            }
+            finally
+            {
+                window.Close();
+            }
         }
 
         private static void SwitchTabsForCommentTargets()
