@@ -97,6 +97,7 @@ namespace SourceGit.ReviewTests
                 (nameof(AvoidConsecutiveMenuSeparators), AvoidConsecutiveMenuSeparators),
                 (nameof(FormatCommentRowsCompactly), FormatCommentRowsCompactly),
                 (nameof(FocusCommentEditorAtTheEnd), FocusCommentEditorAtTheEnd),
+                (nameof(ResizeEditorPanelWithSplitter), ResizeEditorPanelWithSplitter),
                 (nameof(SwitchTabsForCommentTargets), SwitchTabsForCommentTargets),
                 (nameof(ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff), ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff),
                 (nameof(ReopenHistoryReviewWithUncommentedSections), ReopenHistoryReviewWithUncommentedSections),
@@ -1572,6 +1573,31 @@ namespace SourceGit.ReviewTests
                 var body = editor.FindControl<SourceGit.Views.CommitMessageTextEditor>("BodyEditor");
                 Check(body.Text == "first line\nsecond line" && body.TextArea.Caret.Offset == body.Text.Length,
                     "Focusing a comment editor must place the caret at the end of its text.");
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+
+        private static void ResizeEditorPanelWithSplitter()
+        {
+            using var page = new Reviews(CreateDirectory());
+            page.OpenPreview(CreateSnapshot("a\nb\nc\n"));
+            var window = OpenReviewWindow(page);
+            try
+            {
+                var view = (SourceGit.Views.Reviews)window.Content;
+                var tabs = view.FindControl<TabControl>("EditorTabs");
+                var splitter = view.FindControl<GridSplitter>("EditorSplitter");
+                PumpLayout(window);
+                Check(splitter != null && Grid.GetRow(splitter) == 4 && double.IsNaN(tabs.Height),
+                    "The editor panel must sit below a draggable splitter instead of a fixed height.");
+                var initial = tabs.Bounds.Height;
+                var grid = (Grid)tabs.Parent;
+                grid.RowDefinitions[5].Height = new GridLength(initial + 80);
+                PumpLayout(window);
+                Check(tabs.Bounds.Height > initial + 40, "The editor panel must follow its resizable row.");
             }
             finally
             {

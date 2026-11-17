@@ -65,7 +65,8 @@ code or attaching them to unverified lines.
 ## Write the review
 
 Editing happens in one docked panel below the diff with three tabs: Comment,
-File comment, and General review. There is no floating editor and no close
+File comment, and General review. A draggable splitter between the diff and the
+panel changes the height of each. There is no floating editor and no close
 button. All three tabs use the same framed editor as the commit message box.
 Escape returns focus to the diff, so the whole review is reachable from the
 keyboard. Focusing a comment editor places the caret at the end of its text.

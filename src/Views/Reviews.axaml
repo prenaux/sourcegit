@@ -113,7 +113,15 @@
         </Grid>
       </Grid>
       <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="Transparent"/>
-      <Grid Grid.Column="2" RowDefinitions="Auto,Auto,Auto,*,Auto">
+      <Grid Grid.Column="2">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="5*" MinHeight="120"/>
+          <RowDefinition Height="4"/>
+          <RowDefinition Height="3*" MinHeight="120"/>
+        </Grid.RowDefinitions>
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="4,0,0,4">
           <Grid Grid.Column="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,8,0">
             <SelectableTextBlock Grid.Column="0" x:Name="ComparisonLabel" Text="{Binding ComparisonLabel}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
@@ -159,7 +167,9 @@
             <v:LoadingIcon Width="32" Height="32" IsVisible="{Binding IsLoadingFile}" IsHitTestVisible="False"/>
           </Grid>
         </Border>
-        <TabControl Grid.Row="4" x:Name="EditorTabs" Height="260" Margin="0,6,0,0" IsVisible="{Binding HasReview}"
+        <GridSplitter Grid.Row="4" x:Name="EditorSplitter" MinHeight="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      Background="{DynamicResource Brush.Border0}" Focusable="False" IsVisible="{Binding HasReview}"/>
+        <TabControl Grid.Row="5" x:Name="EditorTabs" Margin="0,6,0,0" IsVisible="{Binding HasReview}"
                     SelectedIndex="{Binding ActiveTabIndex, Mode=TwoWay}">
           <TabItem Header="{DynamicResource Text.Reviews.Tab.Comment}">
             <v:ReviewCommentEditor x:Name="CommentEditor" DataContext="{Binding Context}" Margin="0,4,0,0"/>
