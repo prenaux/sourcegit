@@ -936,6 +936,16 @@ namespace SourceGit.ViewModels
             return patch.Length == 0 ? Task.CompletedTask : App.CopyTextAsync(patch);
         }
 
+        public Task CopyFilePatchAsync(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return Task.CompletedTask;
+            var item = _allFiles.Find(x => x.Path == path);
+            if (item?.SourceFile == null || !item.SourceFile.IsLoaded || item.IsRecordedContext || item.SourceFile.Patch.Length == 0)
+                return Task.CompletedTask;
+            return App.CopyTextAsync(item.SourceFile.Patch);
+        }
+
         public void BeginReattach(Models.ReviewComment comment)
         {
             _reattach = comment;

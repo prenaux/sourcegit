@@ -98,6 +98,7 @@ namespace SourceGit.ReviewTests
                 (nameof(FormatCommentRowsCompactly), FormatCommentRowsCompactly),
                 (nameof(FocusCommentEditorAtTheEnd), FocusCommentEditorAtTheEnd),
                 (nameof(ResizeEditorPanelWithSplitter), ResizeEditorPanelWithSplitter),
+                (nameof(ShowReviewDiffContextMenu), ShowReviewDiffContextMenu),
                 (nameof(SwitchTabsForCommentTargets), SwitchTabsForCommentTargets),
                 (nameof(ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff), ReopenSavedReviewWithAllFilesAndFullAnnotatedDiff),
                 (nameof(ReopenHistoryReviewWithUncommentedSections), ReopenHistoryReviewWithUncommentedSections),
@@ -1598,6 +1599,30 @@ namespace SourceGit.ReviewTests
                 grid.RowDefinitions[5].Height = new GridLength(initial + 80);
                 PumpLayout(window);
                 Check(tabs.Bounds.Height > initial + 40, "The editor panel must follow its resizable row.");
+            }
+            finally
+            {
+                window.Close();
+            }
+        }
+
+        private static void ShowReviewDiffContextMenu()
+        {
+            using var page = new Reviews(CreateDirectory());
+            page.OpenPreview(CreateSnapshot("a\nb\nc\nd\n"));
+            var window = OpenReviewWindow(page);
+            try
+            {
+                var view = (SourceGit.Views.Reviews)window.Content;
+                var presenter = view.GetVisualDescendants().OfType<SourceGit.Views.ThemedTextDiffPresenter>().First();
+                var menu = presenter.CreateTextContextMenu(3, 4);
+                var headers = menu.Items.OfType<MenuItem>().Select(x => x.Header?.ToString()).ToList();
+                Check(headers.Contains(App.Text("Diff.ContextMenu.Line", 4)), "The review diff menu must keep the line header.");
+                Check(headers.Contains(App.Text("Copy")), "The review diff menu must offer Copy.");
+                Check(headers.Contains(App.Text("FileCM.CopyAsPatch")), "The review diff menu must offer Copy as Patch.");
+                Check(headers.Contains(App.Text("OpenInExternalMergeTool")), "The review diff menu must offer the external merge tool.");
+                Check(!headers.Zip(headers.Skip(1)).Any(x => x.First == "-" && x.Second == "-"),
+                    "The review diff menu must not contain two separators in a row.");
             }
             finally
             {

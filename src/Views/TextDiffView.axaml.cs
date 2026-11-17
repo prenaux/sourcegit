@@ -814,7 +814,7 @@ namespace SourceGit.Views
                 if (e.Key == Key.C)
                 {
                     if (hasShift)
-                        await CopyAsPatchAsync();
+                        await CopyAsPatchAsync(null, null);
                     else
                         await CopyWithoutIndicatorsAsync();
                     e.Handled = true;
@@ -835,9 +835,12 @@ namespace SourceGit.Views
         private void OnTextViewContextRequested(object sender, ContextRequestedEventArgs e)
         {
             var clickedLine = GetContextLine(e);
-            var oldLine = clickedLine?.OldLineNumber ?? 0;
-            var newLine = clickedLine?.NewLineNumber ?? 0;
+            CreateTextContextMenu(clickedLine?.OldLineNumber ?? 0, clickedLine?.NewLineNumber ?? 0).Open(TextArea.TextView);
+            e.Handled = true;
+        }
 
+        public ContextMenu CreateTextContextMenu(int oldLine, int newLine)
+        {
             var menu = new ContextMenu();
             var isMacOS = OperatingSystem.IsMacOS();
 
@@ -868,7 +871,7 @@ namespace SourceGit.Views
                 copyAsPatch.Tag = isMacOS ? "⌘+⇧+C" : "Ctrl+Shift+C";
                 copyAsPatch.Click += async (_, ev) =>
                 {
-                    await CopyAsPatchAsync(diff);
+                    await CopyAsPatchAsync(diff, null);
                     ev.Handled = true;
                 };
                 menu.Items.Add(copyAsPatch);
@@ -882,44 +885,71 @@ namespace SourceGit.Views
                     ev.Handled = true;
                 };
                 menu.Items.Add(openWithMerger);
-
-                var repo = diff.FindRepository();
-                if (repo != null && DataContext is ViewModels.TextDiffContext ctx)
+                AddCustomActionsToContextMenu(menu, diff.FindRepository(), newLine);
+            }
+            else if (DataContext is ViewModels.TextDiffContext review && review.Review?.Owner is { } reviews)
+            {
+                var copyAsPatch = new MenuItem();
+                copyAsPatch.Header = App.Text("FileCM.CopyAsPatch");
+                copyAsPatch.Icon = App.CreateMenuIcon("Icons.Copy");
+                copyAsPatch.Tag = isMacOS ? "⌘+⇧+C" : "Ctrl+Shift+C";
+                copyAsPatch.Click += async (_, ev) =>
                 {
-                    var actions = repo.GetCustomActions(Models.CustomActionScope.File);
-                    if (actions.Count > 0)
-                    {
-                        menu.Items.Add(new MenuItem() { Header = "-" });
+                    await CopyAsPatchAsync(null, reviews);
+                    ev.Handled = true;
+                };
+                menu.Items.Add(copyAsPatch);
 
-                        var target = new Models.CustomActionTargetFile(ctx.Option.Path, null, newLine);
-                        foreach (var action in actions)
-                        {
-                            var (dup, label) = action;
-                            var item = new MenuItem();
-                            item.Icon = App.CreateMenuIcon("Icons.Action");
-                            item.Header = label;
-                            item.Click += async (_, ev) =>
-                            {
-                                await repo.ExecCustomActionAsync(dup, target);
-                                ev.Handled = true;
-                            };
-
-                            menu.Items.Add(item);
-                        }
-                    }
-                }
+                var openWithMerger = new MenuItem();
+                openWithMerger.Header = App.Text("OpenInExternalMergeTool");
+                openWithMerger.Icon = App.CreateMenuIcon("Icons.OpenWith");
+                openWithMerger.Click += (_, ev) =>
+                {
+                    new Commands.DiffTool(reviews.RepositoryPath, review.Option, oldLine, newLine).Open();
+                    ev.Handled = true;
+                };
+                menu.Items.Add(openWithMerger);
+                AddCustomActionsToContextMenu(menu, reviews.Owner, newLine);
             }
 
-            menu.Open(TextArea.TextView);
-
-            e.Handled = true;
+            return menu;
         }
 
-        private async Task CopyAsPatchAsync(ViewModels.DiffContext diff = null)
+        private void AddCustomActionsToContextMenu(ContextMenu menu, ViewModels.Repository repository, int newLine)
+        {
+            if (repository == null || DataContext is not ViewModels.TextDiffContext ctx)
+                return;
+            var actions = repository.GetCustomActions(Models.CustomActionScope.File);
+            if (actions.Count == 0)
+                return;
+            menu.Items.Add(new MenuItem() { Header = "-" });
+            var target = new Models.CustomActionTargetFile(ctx.Option.Path, null, newLine);
+            foreach (var action in actions)
+            {
+                var (dup, label) = action;
+                var item = new MenuItem();
+                item.Icon = App.CreateMenuIcon("Icons.Action");
+                item.Header = label;
+                item.Click += async (_, ev) =>
+                {
+                    await repository.ExecCustomActionAsync(dup, target);
+                    ev.Handled = true;
+                };
+                menu.Items.Add(item);
+            }
+        }
+
+        private async Task CopyAsPatchAsync(ViewModels.DiffContext diff, ViewModels.Reviews reviews)
         {
             if (!TextArea.Selection.IsEmpty)
             {
                 await CopySelectedAsPatchAsync();
+                return;
+            }
+
+            if (reviews != null)
+            {
+                await reviews.CopyFilePatchAsync(DataContext is ViewModels.TextDiffContext ctx ? ctx.Option.Path : null);
                 return;
             }
 

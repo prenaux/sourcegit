@@ -129,6 +129,10 @@ discarding, and stashing are never offered inside Reviews.
 Copy Path copies the repository-relative path and Copy Full Path copies the
 absolute path, for every selected file.
 
+The diff context menu keeps the same entries as the other diff views: the line
+header, Copy, Copy as Patch, Open in External Merge Tool, and the repository's
+custom file actions with the clicked line as the target.
+
 ## Navigate and update
 
 A section is a contiguous block of changed lines highlighted by diff navigation.

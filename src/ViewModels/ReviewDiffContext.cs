@@ -207,6 +207,8 @@ namespace SourceGit.ViewModels
             _fileCommentsOnly = fileCommentsOnly;
         }
 
+        public Reviews Owner => _owner;
+
         public void BeginFileComment()
         {
             var existing = _file.Comments.Find(x => x.Anchor.Side == Models.ReviewSide.File);
