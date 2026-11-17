@@ -1,0 +1,11 @@
+#!/bin/bash
+if [[ -z $HAM_PROJECT_DIR ]]; then
+  echo "E/HAM_PROJECT_DIR not set !"
+  return 1
+fi
+
+# Base toolsets
+TOOLSET_LIST=(dotnet_10)
+
+# Done, import our toolsets...
+toolset_import_list "${TOOLSET_LIST[@]}" || return 1
