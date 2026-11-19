@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:SourceGit.ViewModels"
+             xmlns:v="using:SourceGit.Views"
              xmlns:c="using:SourceGit.Converters"
              x:Class="SourceGit.Views.Reviews"
              x:DataType="vm:Reviews">
@@ -42,15 +43,15 @@
           <Button x:Name="DeleteReviewButton" Classes="flat" Height="24" Padding="8,0" Content="{DynamicResource Text.Reviews.Delete}" Click="OnDeleteReview"/>
         </StackPanel>
 
-        <Border Grid.Row="1" BorderThickness="1" BorderBrush="{DynamicResource Brush.Border2}" Background="{DynamicResource Brush.Contents}">
-          <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <SelectableTextBlock x:Name="ReviewText"
-                                 Margin="8"
-                                 Text="{Binding SelectedText}"
-                                 TextWrapping="Wrap"
-                                 FontFamily="{DynamicResource Fonts.Monospace}"/>
-          </ScrollViewer>
-        </Border>
+        <v:AIResponseView Grid.Row="1"
+                          x:Name="ReviewText"
+                          BorderThickness="1"
+                          BorderBrush="{DynamicResource Brush.Border2}"
+                          Background="{DynamicResource Brush.Contents}"
+                          FontFamily="{DynamicResource Fonts.Monospace}"
+                          WordWrap="True"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Content="{Binding SelectedText}"/>
       </Grid>
     </Grid>
 

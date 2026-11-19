@@ -18,6 +18,7 @@ namespace SourceGit.ReviewTests
 {
     internal static class Program
     {
+        private const double MaxReviewTextTopGap = 16;
         private static readonly TimeSpan s_waitTimeout = TimeSpan.FromSeconds(30);
         private static string s_root;
         private static Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime s_lifetime;
@@ -424,9 +425,14 @@ namespace SourceGit.ReviewTests
             {
                 Check(page.FindControl<ListBox>("ReviewList").ItemCount == 1 && ReferenceEquals(page.FindControl<ListBox>("ReviewList").SelectedItem, reviews.SelectedItem),
                     "The REVIEWS page must list the saved review and select it.");
-                Check(page.FindControl<SelectableTextBlock>("ReviewText").Text.Contains("finding", StringComparison.Ordinal),
+                Check(page.FindControl<SourceGit.Views.AIResponseView>("ReviewText").Text.Contains("finding", StringComparison.Ordinal),
                     "The REVIEWS page must show the selected review as text.");
-                Check(page.FindControl<Button>("DeleteReviewButton").IsEffectivelyEnabled, "The actions must be available for the selected review.");
+                var actions = page.FindControl<Button>("DeleteReviewButton");
+                Check(actions.IsEffectivelyEnabled, "The actions must be available for the selected review.");
+
+                var textTop = page.FindControl<Control>("ReviewText").TranslatePoint(default, page)?.Y ?? double.MaxValue;
+                var actionsBottom = actions.TranslatePoint(new Point(0, actions.Bounds.Height), page)?.Y ?? 0;
+                Check(textTop - actionsBottom < MaxReviewTextTopGap, "The review text must start at the top of its area.");
             }
             finally
             {

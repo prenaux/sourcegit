@@ -130,7 +130,8 @@ file to see a comment on a line outside the changed blocks.
 ## REVIEWS page
 
 The page lists the saved reviews with their source, date and number of
-comments per state. The selected review shows as text.
+comments per state. The selected review shows as Markdown source with syntax
+colors.
 
 - Open goes to Local changes for a local review, and makes it the active one.
   For the other reviews it goes to the commit or to the compare in History.
