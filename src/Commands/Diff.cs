@@ -24,24 +24,6 @@ namespace SourceGit.Commands
             _result.TextDiff = new Models.TextDiff();
         }
 
-        public static Models.DiffResult ParsePatch(string patch)
-        {
-            var parser = new Diff();
-            var start = 0;
-            for (var i = 0; i < patch.Length; i++)
-            {
-                if (patch[i] != '\n')
-                    continue;
-
-                parser.ParseLine(patch[start..i]);
-                start = i + 1;
-            }
-            if (start < patch.Length)
-                parser.ParseLine(patch[start..]);
-
-            return parser.FinishParsing();
-        }
-
         public Diff(string repo, Models.DiffOption opt, int unified, bool ignoreWhitespace) : this()
         {
 

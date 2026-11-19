@@ -75,10 +75,11 @@ namespace SourceGit.ViewModels
             {
                 if (SetProperty(ref _selectedChanges, value))
                 {
+                    _review?.SelectFile(value is { Count: 1 } ? value[0] : null);
                     if (value is { Count: 1 })
                     {
                         var option = new Models.DiffOption(GetSHA(_startPoint), GetSHA(_endPoint), value[0]);
-                        DiffContext = new DiffContext(_repo.FullPath, option, _diffContext);
+                        DiffContext = new DiffContext(_repo.FullPath, option, _diffContext, _review);
                     }
                     else
                     {
@@ -104,12 +105,19 @@ namespace SourceGit.ViewModels
             private set => SetProperty(ref _diffContext, value);
         }
 
-        public RevisionCompare(Repository repo, Models.Commit startPoint, Models.Commit endPoint)
+        public ReviewSession Review
+        {
+            get => _review;
+        }
+
+        public RevisionCompare(Repository repo, Models.Commit startPoint, Models.Commit endPoint, ReviewSession review = null)
         {
             _repo = repo;
+            _review = review;
             ChangeTreeExpansion = repo.UIStates.RevisionCompareTreeExpansion;
             _startPoint = (object)startPoint ?? new Models.Null();
             _endPoint = (object)endPoint ?? new Models.Null();
+            OpenReview();
             Refresh();
         }
 
@@ -142,7 +150,13 @@ namespace SourceGit.ViewModels
             VisibleChanges = [];
             SelectedChanges = [];
             IsLoading = true;
+            OpenReview();
             Refresh();
+        }
+
+        public void ApplyReviewFilter()
+        {
+            RefreshVisible();
         }
 
         public string GetAbsPath(string path)
@@ -339,21 +353,30 @@ namespace SourceGit.ViewModels
             if (_changes == null)
                 return;
 
-            if (string.IsNullOrEmpty(_searchFilter))
+            var visible = _changes;
+            if (!string.IsNullOrEmpty(_searchFilter))
             {
-                VisibleChanges = _changes;
-            }
-            else
-            {
-                var visible = new List<Models.Change>();
+                visible = new List<Models.Change>();
                 foreach (var c in _changes)
                 {
                     if (c.Path.Contains(_searchFilter, StringComparison.OrdinalIgnoreCase))
                         visible.Add(c);
                 }
-
-                VisibleChanges = visible;
             }
+
+            VisibleChanges = _review == null ? visible : _review.FilterChanges(visible);
+        }
+
+        // A review needs two commits. A compare with the worktree changes with each edit.
+        private void OpenReview()
+        {
+            if (_review == null)
+                return;
+
+            if (_startPoint is Models.Commit start && _endPoint is Models.Commit end)
+                _review.Open(Models.ReviewSourceKind.Comparison, start.SHA, end.SHA, $"{start.SHA[..10]} -> {end.SHA[..10]}");
+            else
+                _review.Close();
         }
 
         private void Refresh()
@@ -377,6 +400,12 @@ namespace SourceGit.ViewModels
 
                 Dispatcher.UIThread.Post(() =>
                 {
+                    if (_review != null)
+                    {
+                        _review.SetChanges(_changes);
+                        visible = _review.FilterChanges(visible);
+                    }
+
                     TotalChanges = _changes.Count;
                     VisibleChanges = visible;
                     IsLoading = false;
@@ -400,6 +429,7 @@ namespace SourceGit.ViewModels
         }
 
         private Repository _repo;
+        private ReviewSession _review;
         private bool _isLoading = true;
         private object _startPoint = null;
         private object _endPoint = null;

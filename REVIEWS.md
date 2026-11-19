@@ -1,218 +1,172 @@
 # Local reviews
 
-Reviews retain findings without archiving unrelated code. Open REVIEWS in the
-repository sidebar, use Reviews in Local changes, or choose Review changes from
-the History context menu for a commit or two comparison endpoints.
+A review is a set of comments on code changes. You write the comments in
+Local changes and in History, on the standard diff view. SourceGit saves each
+review in the `_reviews/` folder of the repository. The REVIEWS page lists the
+saved reviews.
 
-## Open a source
+## Which review is open
 
-Start a commit review or a comparison between two selected commits from History.
-In Local changes, the Reviews menu provides Review Staged Changes, Review
-Unstaged Changes, and Review All Local Changes. Its button occupies a separate
-column to the right of the search field; the clear-search icon remains inside
-the search field. Starting a review does not save it by itself.
+- Local changes has one local review. The files of the Unstaged list and of
+  the Staged list share it.
+- A selected commit in History has its own review. The diff is the commit
+  against its first parent.
+- Two selected commits in History have the review of their compare.
+- More than two selected commits show the compare from the oldest selected
+  commit to the newest one. This compare has its own review. The diff does not
+  contain the changes of the oldest commit itself.
+- A compare with the worktree has no review, because its content changes with
+  each edit.
 
-A commit is compared with its first parent, or the empty tree for an initial
-commit. Revision comparisons show the net difference between the selected
-endpoints. Unstaged and all-local sources include untracked files that Git does
-not ignore. Reviews manages saved reviews and snapshots rather than providing
-another source-creation form. Without saved work, it shows an empty state and
-does not automatically start a local source.
+SourceGit writes a review when it gets its first comment or general text.
+Opening a page or selecting a file writes nothing.
 
-The file list is the same change tree used by Local changes, with Tree, Grid,
-and List modes, a remembered view mode, and remembered folder expansion. The
-rounded search field matches repository-relative paths and combines with All
-files, Reviewed, Unreviewed, Comment, To fix, Fixed, and Dismissed. A file
-matches a comment-state filter when at least one nonempty comment has that state.
-The list status icon follows the captured patch, so a deleted file shows the
-deleted icon and an added file shows the added icon before its content loads.
-Each file row shows one review mark after its name: a warning glyph and the open
-count when the file has tofix findings, a check glyph when it has comments and
-no tofix findings, and no mark when it has no comments. Folder rows never show a
-review mark, and folders do not aggregate their children's marks.
+The local review continues until you choose New Review in the review actions.
+The previous local review stays in the REVIEWS page.
 
-The file tree loads paths and status before file contents. Selecting a file
-loads its diff asynchronously. Selecting another file cancels obsolete loading.
-Unreviewed local files are live previews and reload when selected again. Opening
-or browsing a preview does not create review files.
+## Review panel
 
-History, the saved-review selector, and the snapshot selector reconstruct the
-same complete available file list. Selecting an annotated file loads its full
-source diff, including sections without comments. Browsing diffs are separate
-from persisted comment excerpts; loading a complete diff does not save it.
+Local changes shows four tabs below the diff: Commit, Comment, File comment
+and General review. The Commit tab holds the commit message and the commit
+buttons. The commit shortcuts work while the Commit tab is open.
 
-The comparison label uses Staged changes, Unstaged changes, or All local changes
-for local sources. Commit sources show selectable revision endpoints. The
-diff header also shows the selected file's added and deleted line counts. The
-selected file's absolute path is selectable above the diff.
+History shows the three review tabs below the detail of the selection. A
+splitter between the detail and the tabs changes their heights.
 
-The Reviewed filter means at least one nonempty comment, including fixed or
-dismissed comments. Unreviewed means no nonempty comments. The file tree and the
-comments list share the left column with a horizontal splitter, and both panes
-scroll independently. The comments list header shows the selected file's comment
-count.
+- The Comment tab follows the caret and the selection of the diff. It shows
+  the comment on the caret line, or an empty editor for the selected lines.
+  Text that you type there creates the comment.
+- The File comment tab edits the one file comment of the selected file.
+- The General review tab edits the review subject and the general notes. The
+  first line is the subject. A blank line separates it from the notes.
 
-A comment records the selected file's identity. Code already associated with
-review work does not reload silently. Update snapshot
-refreshes the source and migrates existing findings. Source-change checks are
-limited to reviewed and selected files, rather than hashing every working file.
-If the original Git source is unavailable, or current local contents no longer
-match recorded code, the viewer explicitly labels its limited recorded-context
-fallback. Existing findings remain readable. An explicit snapshot update loads
-current local changes and migrates findings instead of silently changing their
-code or attaching them to unverified lines.
+Each change is saved automatically. A comment without text is removed when
+its editor loses the focus or gets another target. Escape in an editor returns
+the focus to the diff.
 
-## Write the review
+The button at the right of the tab headers shows or hides the comment list.
+The list shows the comments of the selected file: the file comment first, then
+the line comments by line. A click on a row moves the diff to that comment.
+Enter on a row moves the focus to its editor.
 
-Editing happens in one docked panel below the diff with three tabs: Comment,
-File comment, and General review. A draggable splitter between the diff and the
-panel changes the height of each. There is no floating editor and no close
-button. All three tabs use the same framed editor as the commit message box.
-Escape returns focus to the diff, so the whole review is reachable from the
-keyboard. Focusing a comment editor places the caret at the end of its text.
+## Comment in the diff
 
-The Comment tab follows the diff caret and selection. It shows the finding under
-the caret, or an empty editor targeting the selected lines or current line.
-Moving the caret retargets the tab; every keystroke is already saved, so nothing
-is lost. Ctrl+M or the Comment action gives that tab focus. An empty or
-whitespace body removes its finding when the target changes or the editor loses
-focus. The File comment tab edits the single file-level comment and omits the
-redundant whole-file anchor label.
+The diff is the standard diff view. All its toolbar buttons work: more or
+fewer context lines, the entire file, whitespace, side by side and the
+external tool.
 
-General review uses the commit-message editor. Its first line is the review
-subject; a blank line separates the subject from the body. Commit and comparison
-subjects supply the initial subject and appear in the snapshot selector with
-revision and date information.
+- Hover a block of changes to get its floating actions. Comment stands beside
+  Stage, Unstage and Discard, and it targets the changed lines of the block.
+- Select lines, then use Comment, to comment exactly these lines.
+- A blue dot in the left margin marks a commented line. A click on the dot
+  opens the comment.
+- The review button in the diff toolbar lists every review action with its
+  shortcut.
 
-Comment records the current line when no text is selected. Comment on selection
-records the selected source range with surrounding context. Hovering a commented
-line offers Edit comment instead of creating another finding. General review
-text and comments use the same editor as commit messages. Comments omit
-commit-subject decorations. Typing preserves text, blank lines, and caret state.
-Closing an empty or whitespace-only comment removes it.
+Shortcuts:
 
-Comment states are fixed:
+- Ctrl+M comments on the selection, or on the caret line.
+- Ctrl+Down moves the caret to the end of the current block of changes, then
+  to the start of the next block. Ctrl+Up does the reverse. These two
+  shortcuts work in every diff view.
+- Shift with Ctrl+Up or Ctrl+Down extends the selection to that position. The
+  diff must have the keyboard focus.
+- Ctrl+Alt+Down and Ctrl+Alt+Up go to the next and to the previous comment of
+  the diff.
 
-- tofix is the default and identifies work that requires a change.
-- comment records an observation or discussion without requesting a change.
-- fixed identifies a finding that has been addressed.
-- dismissed identifies a finding that requires no action.
+## Comment states
 
-Files have no separate manual reviewed mark or progress state. Removing the last
-nonempty comment makes a file unreviewed. A file has at most one file-level
-comment, edited from the File comment tab or from Edit file comment.
+- tofix is the default. The finding requires a change.
+- comment records an observation that requires no change.
+- fixed marks a finding that was addressed.
+- dismissed marks a finding that requires no action.
 
-## File context menu
+## Files
 
-The file tree uses the standard change-list selection, including multi-select.
-Review commands come first, then the standard file commands.
+Each file row shows one review mark after its name: a warning sign with the
+number of tofix comments, or a check mark when the file has comments and no
+tofix comment. The marks show in the Unstaged list, the Staged list, the
+changes of a commit and the changes of a compare.
 
-- Edit file comment opens the file-level comment. It is available only when one
-  file is selected.
-- Mark as OK stores one dismissed file comment with the text OK, which makes the
-  file reviewed quickly. It is available only when no selected file has a tofix
-  comment. Otherwise the item is disabled and its label names the count.
-- Set all comments applies comment, tofix, fixed, or dismissed to every comment
-  in every selected file, including comments outside the current diff.
+The filter box beside the search box keeps the files that match: All files,
+Reviewed, Unreviewed, Comment, To fix, Fixed or Dismissed. Reviewed means at
+least one comment with text. The list updates when you change the filter, mark
+files as OK, or set all comments.
 
-State changes are immediate and cannot be undone.
+The context menu of the file lists starts with the review actions:
 
-Save as Patch and Copy as Patch use the selected files' complete patches. They
-are available only when every selected file has loaded full source, so a
-recorded-context-only file is never exported as a patch that would not apply.
+- Edit file comment opens the File comment tab. It needs one selected file.
+- Mark as OK stores a file comment with the text OK and the state comment.
+  It is disabled while a selected file has a tofix comment.
+- Set all comments applies one state to every comment of the selected files.
 
-Open, Reveal, File History, Blame, and custom file actions are available for
-single-file selections in every review source, because they act on the working
-file path. Open and Reveal stay disabled when the working file is absent. Staging,
-discarding, and stashing are never offered inside Reviews.
+## How comments follow the code
 
-Copy Path copies the repository-relative path and Copy Full Path copies the
-absolute path, for every selected file.
+A comment belongs to a file path. Staging or unstaging a file does not change
+its path, so its comments stay. When git reports a rename, the comments move
+to the new path.
 
-The diff context menu keeps the same entries as the other diff views: the line
-header, Copy, Copy as Patch, Open in External Merge Tool, and the repository's
-custom file actions with the clicked line as the target.
+A line comment records its lines and up to four lines around them. Each time
+a diff loads, SourceGit looks for this code in the lines of the diff:
 
-## Navigate and update
+- The code is at the recorded lines: the comment stays attached.
+- The code is at one other place: the comment moves there.
+- The recorded lines show other code: the comment shows Needs attention.
+- The diff does not show the recorded lines: the comment shows Outside current
+  diff.
 
-A section is a contiguous block of changed lines highlighted by diff navigation.
-One Git patch hunk can contain multiple sections. Reviews provides first, last,
-and previous/next boundary controls with a section position indicator. History
-and Local changes retain their existing navigation behavior.
+The last two states are set only in Local changes, for a file that is in one
+list only. A commit does not change, so a hidden comment there is still valid.
+A file with staged and unstaged parts has two diffs, and each one shows only a
+part of the code.
 
-Review shortcuts are active only inside Reviews:
+A comment that is not attached keeps its last known lines and code. Move
+comment to selected lines attaches it again: select the lines, then use the
+Comment action, which reads Attach comment here.
 
-- Ctrl+M comments on the selection, or edits the finding on the current line.
-  Without a selection or existing finding, it comments on the current line.
-- Ctrl+Down moves to the current section's end, then the next section's start,
-  then its end. Ctrl+Up follows those boundaries in reverse.
-- Adding Shift extends the selection through the same boundaries without moving
-  its original anchor. The end boundary includes the section's final line break.
-- Enter focuses the selected comment's editor when the comments list has focus.
-- Escape closes the comment editor, cancels relocation, and returns focus to the
-  diff. Enter inside an editor continues to insert a newline.
+Limit: the search reads only the lines that the diff shows. Show the entire
+file to see a comment on a line outside the changed blocks.
 
-The comment shortcut also accepts Command on macOS. Boundary navigation does not
-intercept normal text navigation inside a comment or general-review editor.
+## REVIEWS page
 
-The comments list sits below the file tree behind a horizontal splitter. Its
-header shows the selected file's comment count using the same style as the
-Unstaged and Staged section labels. Each row uses two lines: the first nonempty
-body line, then a grey line with the state and the range, for example
-"tofix - New: 12-13". Attached comments omit the meaningless Attached word;
-Needs attention and Outside current diff remain visible. Comments sort the
-whole-file finding first, then by the first line of the range, then by range
-length. A mixed target displays both old and new source ranges.
+The page lists the saved reviews with their source, date and number of
+comments per state. The selected review shows as text.
 
-Updating preserves comment IDs and workflow states. Unambiguous unchanged ranges
-migrate using their recorded context. Edited or ambiguous ranges show Needs
-attention. Findings without a current diff location show
-Outside current diff. Neither condition resolves a finding automatically.
-
-Recovery actions appear only when applicable. Move comment to selected lines
-starts relocation: select its destination and choose Attach comment here. Show
-original commented code opens the recorded version in which the finding was
-added. Each recorded version retains its own comments and placements.
+- Open goes to Local changes for a local review, and makes it the active one.
+  For the other reviews it goes to the commit or to the compare in History.
+- Copy Review copies the review text to the clipboard.
+- Delete moves the review folder to `_toremove/_reviews/`. SourceGit does not
+  erase it, so you can restore or erase the folder by hand.
 
 ## Storage and copying
 
-Active review data lives in the repository's `_reviews/` directory. Each review
-has two files under `<review_id>/`:
+Each review has two files under `_reviews/<review_id>/`:
 
-- `review.md` presents the saved subject, general notes, findings, states,
-  locations, and relevant code context as readable text.
-- `review.xml` retains compact metadata, anchors, and history for actual review
-  work. The application uses this file when reopening the review. It is the
-  authoritative file; `review.md` is a presentation, not an input. Editing
-  comment text or state in `review.xml` is effective, while changing recorded
-  code context also requires updating its capture hash.
+- `review.xml` holds the comments, their states, their lines and the recorded
+  code. SourceGit reads only this file. You can edit comment text and states
+  in it by hand.
+- `review.md` shows the same review as readable text. SourceGit writes it
+  again with each save.
 
-Untouched files are not persisted. A line comment retains bounded surrounding
-context, even inside a large patch hunk. Selecting a complete section retains
-that section and its surrounding context. General-only reviews do not capture
-file data. A file marked OK persists one dismissed file comment. Full source
-files and per-file snapshot documents are not written. Saved context remains
-readable without the original Git objects or current working files.
+Files without a comment are not stored. SourceGit writes both files to a
+temporary name first and then renames them, so a failed write keeps the
+previous version.
 
-Copy Review copies the subject, general notes, and active comment and tofix
-findings. Each finding precedes its location and relevant code context. It does
-not copy unrelated files or the entire comparison. Code blocks are partial diff
-context, not complete patches to apply. Fixed and dismissed findings remain in
-the saved Markdown but are omitted from the clipboard text. Uncertain findings
-include an explicit warning and their original context.
+Copy Review copies the subject, the general notes, and the comment and tofix
+findings. Each finding comes with its location and a short diff of its code.
+These diffs are for reading. They are not patches to apply. Fixed and
+dismissed findings stay in `review.md` only. A finding that is not attached
+says so.
 
-The application converts the earlier snapshot-directory format when opening an
-existing review. It preserves findings, general text, workflow states, and
-recorded context, then writes the compact format. After successful conversion,
-old generated snapshots and full-source caches move to `_toremove/_reviews/` for
-inspection instead of being deleted. Obsolete manual file marks are ignored on
-load and omitted on save; comments, subjects, and general notes are retained.
-The legacy reader is used only for this one-time conversion; subsequent opens
-use the compact metadata. Conversion errors
-leave the original data available and appear in the review status.
+SourceGit does not change the ignore rules. The `_reviews/` files show in
+Local changes unless the repository ignores them.
 
-Review capture excludes both active review storage and its conversion archive.
-The application does not change ignore rules or stage these files. XML and
-Markdown writes use atomic replacement. Binary and metadata-only changes support
-file comments. Local sources require a resolved index; edits during a selected
-file capture cause a retry or a visible error.
+SourceGit rejects a `review.xml` with a document type declaration, and it
+does not follow symbolic links in the storage path. These two rules stop a
+repository from making SourceGit read or write files outside `_reviews/`.
+
+Version 2 of `review.xml` stored one comment list per snapshot of the code.
+SourceGit still reads these files and keeps the comments of the last snapshot.
+It writes version 3 at the next change of the review. The version 2 reader in
+`src/Models/ReviewStore.cs` can be removed when no repository holds such a
+file.

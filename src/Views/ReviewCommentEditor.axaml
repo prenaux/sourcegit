@@ -5,10 +5,10 @@
              xmlns:c="using:SourceGit.Converters"
              xmlns:v="using:SourceGit.Views"
              x:Class="SourceGit.Views.ReviewCommentEditor"
-             x:DataType="vm:ReviewDiffContext"
+             x:DataType="vm:ReviewCommentDraft"
              LostFocus="OnLostFocus">
   <Border Background="{DynamicResource Brush.Contents}" BorderThickness="1" BorderBrush="{DynamicResource Brush.Border2}" CornerRadius="4">
-    <Grid RowDefinitions="*,1,Auto">
+    <Grid RowDefinitions="*,1,Auto" IsEnabled="{Binding HasTarget, FallbackValue=False}">
       <v:CommitMessageTextEditor Grid.Row="0" x:Name="BodyEditor"
                                  CommitMessage="{Binding Body, Mode=TwoWay}"
                                  ShowSubjectGuide="False"
@@ -30,12 +30,8 @@
           <TextBlock Text="{Binding AttachmentLabel}" Foreground="{DynamicResource Brush.FG2}"
                      IsVisible="{Binding AttachmentLabel, Converter={x:Static c:StringConverters.IsNotNullOrWhitespace}}"/>
         </StackPanel>
-        <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,0">
-          <Button Classes="flat" Height="22" Padding="6,0" Margin="4,0,0,0"
-                  Content="{DynamicResource Text.Reviews.Reattach}" Command="{Binding BeginReattach}" IsVisible="{Binding CanReattach}"/>
-          <Button Classes="flat" Height="22" Padding="6,0" Margin="4,0,0,0"
-                  Content="{DynamicResource Text.Reviews.OpenOriginal}" Command="{Binding OpenOriginal}" IsVisible="{Binding CanOpenOriginal}"/>
-        </StackPanel>
+        <Button Grid.Column="2" Classes="flat" Height="22" Padding="6,0" Margin="4,0"
+                Content="{DynamicResource Text.Reviews.Reattach}" Command="{Binding BeginReattach}" IsVisible="{Binding CanReattach}"/>
       </Grid>
     </Grid>
   </Border>

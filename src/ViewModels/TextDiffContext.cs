@@ -28,10 +28,10 @@ namespace SourceGit.ViewModels
     {
         public Models.DiffOption Option => _option;
         public Models.TextDiff Data => _data;
-        public ReviewDiffContext Review { get; set; }
+        public ReviewSession Review { get; set; }
         public bool IsReview => Review != null;
-        public bool CanStageChunks => !IsReview && _option?.WorkingCopyChange != null && _option.IsUnstaged;
-        public bool CanUnstageChunks => !IsReview && _option?.WorkingCopyChange != null && !_option.IsUnstaged;
+        public bool CanStageChunks => _option?.WorkingCopyChange != null && _option.IsUnstaged;
+        public bool CanUnstageChunks => _option?.WorkingCopyChange != null && !_option.IsUnstaged;
 
         public Vector ScrollOffset
         {
@@ -57,23 +57,39 @@ namespace SourceGit.ViewModels
             set => SetProperty(ref _selectedChunk, value);
         }
 
-        public TextDiffSelectedChunk CreateReviewSelection(ReviewPane pane, int first, int last)
+        public TextDiffSelectedChunk CreateReviewSelection(Models.ReviewPane pane, int first, int last)
         {
-            if (!IsReview || _data.Lines.Count == 0)
+            if (_data.Lines.Count == 0)
                 return null;
-            var lines = this is TwoSideTextDiff split && pane != ReviewPane.Combined ?
-                pane == ReviewPane.Old ? split.Old : split.New : _data.Lines;
+            var lines = this is TwoSideTextDiff split && pane != Models.ReviewPane.Combined ?
+                pane == Models.ReviewPane.Old ? split.Old : split.New : _data.Lines;
             if (lines.Count == 0)
                 return null;
             first = Math.Clamp(first, 0, lines.Count - 1);
             last = Math.Clamp(last, first, lines.Count - 1);
-            if (this is TwoSideTextDiff twoSide && pane != ReviewPane.Combined)
+            if (this is TwoSideTextDiff twoSide && pane != Models.ReviewPane.Combined)
             {
                 if (first == last && lines[first].Type is Models.TextDiffLineType.None or Models.TextDiffLineType.Indicator)
                     return null;
-                twoSide.GetCombinedRangeForSingleSide(ref first, ref last, pane == ReviewPane.Old);
+                twoSide.GetCombinedRangeForSingleSide(ref first, ref last, pane == Models.ReviewPane.Old);
             }
-            return new TextDiffSelectedChunk(0, 0, first, last, pane == ReviewPane.Combined, pane == ReviewPane.Old);
+            return new TextDiffSelectedChunk(0, 0, first, last, pane == Models.ReviewPane.Combined, pane == Models.ReviewPane.Old);
+        }
+
+        // The Stage, Unstage and Discard actions use a chunk with some context lines. A comment uses the changed lines only.
+        public TextDiffSelectedChunk TrimChunkToChanges(TextDiffSelectedChunk chunk)
+        {
+            var first = -1;
+            var last = -1;
+            for (var i = Math.Max(0, chunk.StartIdx); i <= chunk.EndIdx && i < _data.Lines.Count; i++)
+            {
+                if (_data.Lines[i].Type is not (Models.TextDiffLineType.Added or Models.TextDiffLineType.Deleted))
+                    continue;
+                if (first < 0)
+                    first = i;
+                last = i;
+            }
+            return first < 0 ? chunk : chunk with { StartIdx = first, EndIdx = last };
         }
 
         public (int, int) FindRangeByIndex(List<Models.TextDiffLine> lines, int lineIdx)
@@ -198,7 +214,7 @@ namespace SourceGit.ViewModels
 
         public override TextDiffContext SwitchMode()
         {
-            return new TwoSideTextDiff(_option, _data, this) { Review = Review };
+            return new TwoSideTextDiff(_option, _data, this);
         }
     }
 
@@ -241,7 +257,7 @@ namespace SourceGit.ViewModels
 
         public override TextDiffContext SwitchMode()
         {
-            return new CombinedTextDiff(_option, _data, this) { Review = Review };
+            return new CombinedTextDiff(_option, _data, this);
         }
 
         public void GetCombinedRangeForSingleSide(ref int startLine, ref int endLine, bool isOldSide)

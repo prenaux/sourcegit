@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Threading.Tasks;
 
@@ -12,6 +13,8 @@ namespace SourceGit.ViewModels
 {
     public class Histories : ObservableObject, IDisposable
     {
+        private const double DefaultReviewAreaHeight = 180;
+
         public bool IsLoading
         {
             get => _isLoading;
@@ -125,14 +128,32 @@ namespace SourceGit.ViewModels
             set => SetProperty(ref _bottomArea, value);
         }
 
+        public ReviewSession Review
+        {
+            get;
+        }
+
+        // The height of the review panel below the commit detail. It is zero while no review is open.
+        public GridLength ReviewArea
+        {
+            get => _reviewArea;
+            set => SetProperty(ref _reviewArea, value);
+        }
+
         public Histories(Repository repo)
         {
             _repo = repo;
             _commitDetailSharedData = new CommitDetailSharedData();
+            Review = new ReviewSession(repo.Reviews, ReviewTab.Comment);
+            Review.FilterChanged += OnReviewFilterChanged;
+            Review.PropertyChanged += OnReviewPropertyChanged;
         }
 
         public void Dispose()
         {
+            Review.FilterChanged -= OnReviewFilterChanged;
+            Review.PropertyChanged -= OnReviewPropertyChanged;
+            Review.Close();
             Commits = [];
             _repo = null;
             _graph = null;
@@ -199,7 +220,7 @@ namespace SourceGit.ViewModels
                     }
                     else
                     {
-                        var commitDetail = new CommitDetail(_repo, _commitDetailSharedData);
+                        var commitDetail = new CommitDetail(_repo, _commitDetailSharedData, Review);
                         commitDetail.Commit = c;
                         DetailContext = commitDetail;
                     }
@@ -217,6 +238,7 @@ namespace SourceGit.ViewModels
             if (commits.Count == 0)
             {
                 _repo.SearchCommitContext.Selected = null;
+                Review.Close();
                 DetailContext = null;
             }
             else if (commits.Count == 1)
@@ -234,7 +256,7 @@ namespace SourceGit.ViewModels
                 }
                 else
                 {
-                    var commitDetail = new CommitDetail(_repo, _commitDetailSharedData);
+                    var commitDetail = new CommitDetail(_repo, _commitDetailSharedData, Review);
                     commitDetail.Commit = commit;
                     DetailContext = commitDetail;
                 }
@@ -245,13 +267,42 @@ namespace SourceGit.ViewModels
 
                 var end = commits[0] as Models.Commit;
                 var start = commits[1] as Models.Commit;
-                DetailContext = new RevisionCompare(_repo, start, end);
+                DetailContext = new RevisionCompare(_repo, start, end, Review);
             }
             else
             {
                 _repo.SearchCommitContext.Selected = null;
-                DetailContext = new Models.Count(commits.Count);
+
+                // A larger selection is a range. The compare goes from its oldest commit to its newest commit.
+                var selected = new HashSet<Models.Commit>();
+                foreach (var item in commits)
+                    selected.Add(item as Models.Commit);
+
+                Models.Commit newest = null;
+                Models.Commit oldest = null;
+                foreach (var commit in _commits)
+                {
+                    if (!selected.Contains(commit))
+                        continue;
+
+                    newest ??= commit;
+                    oldest = commit;
+                }
+
+                if (oldest != null)
+                    DetailContext = new RevisionCompare(_repo, oldest, newest, Review);
             }
+        }
+
+        public async Task CompareRevisionsAsync(string baseRevision, string targetRevision)
+        {
+            var start = await GetCommitAsync(baseRevision);
+            var end = await GetCommitAsync(targetRevision);
+            if (start == null || end == null)
+                return;
+
+            _repo.SearchCommitContext.Selected = null;
+            DetailContext = new RevisionCompare(_repo, start, end, Review);
         }
 
         public async Task<Models.Commit> GetCommitAsync(string sha)
@@ -449,7 +500,7 @@ namespace SourceGit.ViewModels
                 _repo.SearchCommitContext.Selected = null;
                 head = await new Commands.QuerySingleCommit(_repo.FullPath, "HEAD").GetResultAsync();
                 if (head != null)
-                    DetailContext = new RevisionCompare(_repo, commit, head);
+                    DetailContext = new RevisionCompare(_repo, commit, head, Review);
 
                 return null;
             }
@@ -459,7 +510,30 @@ namespace SourceGit.ViewModels
 
         public void CompareWithWorktree(Models.Commit commit)
         {
-            DetailContext = new RevisionCompare(_repo, commit, null);
+            DetailContext = new RevisionCompare(_repo, commit, null, Review);
+        }
+
+        private void OnReviewFilterChanged(object sender, EventArgs e)
+        {
+            if (_detailContext is CommitDetail detail)
+                detail.ApplyReviewFilter();
+            else if (_detailContext is RevisionCompare compare)
+                compare.ApplyReviewFilter();
+        }
+
+        private void OnReviewPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(ReviewSession.HasReview) || Review.HasReview == _reviewArea.Value > 0)
+                return;
+
+            if (Review.HasReview)
+            {
+                ReviewArea = _lastReviewArea;
+                return;
+            }
+
+            _lastReviewArea = _reviewArea;
+            ReviewArea = new GridLength(0, GridUnitType.Pixel);
         }
 
         private Repository _repo = null;
@@ -477,5 +551,7 @@ namespace SourceGit.ViewModels
         private GridLength _rightArea = new GridLength(1, GridUnitType.Star);
         private GridLength _topArea = new GridLength(1, GridUnitType.Star);
         private GridLength _bottomArea = new GridLength(1, GridUnitType.Star);
+        private GridLength _reviewArea = new GridLength(0, GridUnitType.Pixel);
+        private GridLength _lastReviewArea = new GridLength(DefaultReviewAreaHeight, GridUnitType.Pixel);
     }
 }

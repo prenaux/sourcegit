@@ -17,6 +17,11 @@ namespace SourceGit.ViewModels
             get => _repo;
         }
 
+        public ReviewSession Review
+        {
+            get;
+        }
+
         public bool IncludeUntracked
         {
             get => _repo.IncludeUntracked;
@@ -110,7 +115,8 @@ namespace SourceGit.ViewModels
                     }
 
                     Staged = GetStagedChanges(_cached);
-                    VisibleStaged = GetVisibleChanges(_staged);
+                    Review.SetChanges([.. _unstaged, .. _staged]);
+                    VisibleStaged = Review.FilterChanges(GetVisibleChanges(_staged));
                     SelectedStaged = [];
                 }
             }
@@ -132,8 +138,8 @@ namespace SourceGit.ViewModels
                     if (_isLoadingData)
                         return;
 
-                    VisibleUnstaged = GetVisibleChanges(_unstaged);
-                    VisibleStaged = GetVisibleChanges(_staged);
+                    VisibleUnstaged = Review.FilterChanges(GetVisibleChanges(_unstaged));
+                    VisibleStaged = Review.FilterChanges(GetVisibleChanges(_staged));
                     SelectedUnstaged = [];
                 }
             }
@@ -230,12 +236,17 @@ namespace SourceGit.ViewModels
         public WorkingCopy(Repository repo)
         {
             _repo = repo;
+            Review = new ReviewSession(repo.Reviews, ReviewTab.Commit);
+            Review.FilterChanged += OnReviewFilterChanged;
         }
 
         public void Dispose()
         {
             if (_inProgressContext != null && !string.IsNullOrEmpty(_commitMessage))
                 File.WriteAllText(Path.Combine(_repo.GitDir, "MERGE_MSG"), _commitMessage);
+
+            Review.FilterChanged -= OnReviewFilterChanged;
+            Review.Close();
 
             _repo = null;
             _inProgressContext = null;
@@ -336,8 +347,15 @@ namespace SourceGit.ViewModels
                 _isLoadingData = true;
                 _cached = changes;
                 HasUnsolvedConflicts = hasConflict;
-                VisibleUnstaged = visibleUnstaged;
-                VisibleStaged = visibleStaged;
+
+                // The review reads its comments on the UI thread only.
+                Review.OpenLocal();
+                Review.SetChanges([.. unstaged, .. staged]);
+                selectedUnstaged.RemoveAll(x => x != null && !Review.MatchesFilter(x));
+                selectedStaged.RemoveAll(x => x != null && !Review.MatchesFilter(x));
+
+                VisibleUnstaged = Review.FilterChanges(visibleUnstaged);
+                VisibleStaged = Review.FilterChanges(visibleStaged);
                 Unstaged = unstaged;
                 Staged = staged;
                 SelectedUnstaged = selectedUnstaged;
@@ -828,12 +846,24 @@ namespace SourceGit.ViewModels
             if (_isLoadingData)
                 return;
 
+            Review.SelectFile(change);
             if (change == null)
                 DetailContext = null;
             else if (change.IsConflicted)
                 DetailContext = new Conflict(_repo, this, change);
             else
-                DetailContext = new DiffContext(_repo.FullPath, new Models.DiffOption(change, isUnstaged), _detailContext as DiffContext);
+                DetailContext = new DiffContext(_repo.FullPath, new Models.DiffOption(change, isUnstaged), _detailContext as DiffContext, Review);
+        }
+
+        private void OnReviewFilterChanged(object sender, EventArgs e)
+        {
+            VisibleUnstaged = Review.FilterChanges(GetVisibleChanges(_unstaged));
+            VisibleStaged = Review.FilterChanges(GetVisibleChanges(_staged));
+
+            if (_selectedUnstaged.Exists(x => !_visibleUnstaged.Contains(x)))
+                SelectedUnstaged = [];
+            if (_selectedStaged.Exists(x => !_visibleStaged.Contains(x)))
+                SelectedStaged = [];
         }
 
         private bool IsChanged(List<Models.Change> old, List<Models.Change> cur)

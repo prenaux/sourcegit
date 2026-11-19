@@ -1,0 +1,91 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SourceGit.ViewModels"
+             xmlns:v="using:SourceGit.Views"
+             x:Class="SourceGit.Views.ReviewPanel"
+             x:DataType="vm:ReviewSession"
+             x:Name="ThisControl">
+  <Grid ColumnDefinitions="*,Auto">
+    <TabControl Grid.Column="0" x:Name="EditorTabs" Padding="0,4,0,0" SelectedIndex="{Binding ActiveTabIndex, Mode=TwoWay}">
+      <TabItem x:Name="CommitTab"
+               Header="{DynamicResource Text.Reviews.Tab.Commit}"
+               IsVisible="{Binding #ThisControl.CommitContent, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <ContentPresenter Content="{Binding #ThisControl.CommitContent}"/>
+      </TabItem>
+
+      <TabItem Header="{DynamicResource Text.Reviews.Tab.Comment}" IsEnabled="{Binding HasReview}">
+        <v:ReviewCommentEditor x:Name="CommentEditor" DataContext="{Binding LineDraft}"/>
+      </TabItem>
+
+      <TabItem Header="{DynamicResource Text.Reviews.Tab.File}" IsEnabled="{Binding HasReview}">
+        <v:ReviewCommentEditor x:Name="FileCommentEditor" DataContext="{Binding FileDraft}"/>
+      </TabItem>
+
+      <TabItem Header="{DynamicResource Text.Reviews.Tab.General}" IsEnabled="{Binding HasReview}">
+        <Border Background="{DynamicResource Brush.Contents}" BorderThickness="1" BorderBrush="{DynamicResource Brush.Border2}" CornerRadius="4">
+          <v:CommitMessageTextEditor x:Name="GeneralReviewEditor"
+                                     CommitMessage="{Binding GeneralReviewMessage, Mode=TwoWay}"
+                                     HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                     Placeholder="{DynamicResource Text.Reviews.GeneralPlaceholder}"
+                                     SubjectLineBrush="{DynamicResource Brush.Border2}"
+                                     SubjectGuideLength="{Binding Source={x:Static vm:Preferences.Instance}, Path=SubjectGuideLength}"
+                                     Foreground="{DynamicResource Brush.FG1}"
+                                     FontFamily="{DynamicResource Fonts.Default}"
+                                     FontSize="{Binding Source={x:Static vm:Preferences.Instance}, Path=EditorFontSize}"/>
+        </Border>
+      </TabItem>
+    </TabControl>
+
+    <!-- Shows or hides the comment list. It sits in the free space at the right of the tab headers. -->
+    <ToggleButton Grid.Column="0"
+                  x:Name="CommentListToggle"
+                  Classes="line_path"
+                  Height="24"
+                  Padding="6,0"
+                  HorizontalAlignment="Right" VerticalAlignment="Top"
+                  IsChecked="{Binding #ThisControl.ShowComments, Mode=TwoWay}"
+                  IsVisible="{Binding IsCommentTabActive}"
+                  ToolTip.Tip="{DynamicResource Text.Reviews.Comments}">
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <Path Width="12" Height="12" Stretch="Uniform" Data="{StaticResource Icons.Message}"/>
+        <TextBlock FontSize="11" Text="{Binding CommentsCount}"/>
+      </StackPanel>
+    </ToggleButton>
+
+    <Border Grid.Column="1"
+            x:Name="CommentListBorder"
+            Width="300"
+            Margin="4,0,0,0"
+            BorderThickness="1" BorderBrush="{DynamicResource Brush.Border2}"
+            Background="{DynamicResource Brush.Contents}">
+      <Border.IsVisible>
+        <MultiBinding Converter="{x:Static BoolConverters.And}">
+          <Binding Path="#ThisControl.ShowComments"/>
+          <Binding Path="IsCommentTabActive"/>
+        </MultiBinding>
+      </Border.IsVisible>
+
+      <ListBox x:Name="CommentList"
+               Background="Transparent"
+               ItemsSource="{Binding Comments}"
+               SelectedItem="{Binding SelectedComment, Mode=TwoWay}"
+               Tapped="OnCommentListTapped"
+               KeyDown="OnCommentListKeyDown">
+        <ListBox.Styles>
+          <Style Selector="ListBoxItem">
+            <Setter Property="MinHeight" Value="40"/>
+            <Setter Property="Padding" Value="4,2"/>
+          </Style>
+        </ListBox.Styles>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ReviewCommentItem">
+            <StackPanel Spacing="1">
+              <TextBlock Text="{Binding FirstLine}" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource Brush.FG2}" TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Border>
+  </Grid>
+</UserControl>

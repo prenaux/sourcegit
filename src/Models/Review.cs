@@ -1,20 +1,13 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Security.Cryptography;
-using System.Text;
-
-using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace SourceGit.Models
 {
     public enum ReviewSourceKind
     {
+        Local,
         Commit,
         Comparison,
-        Staged,
-        Unstaged,
-        AllLocal,
     }
 
     public enum ReviewCommentState
@@ -42,18 +35,20 @@ namespace SourceGit.Models
     public class ReviewAnchor
     {
         public ReviewSide Side { get; set; }
-        public int StartLine { get; set; }
-        public int EndLine { get; set; }
         public int OldStartLine { get; set; }
         public int OldEndLine { get; set; }
         public int NewStartLine { get; set; }
         public int NewEndLine { get; set; }
         public ReviewAttachment Attachment { get; set; }
         public string Quote { get; set; } = string.Empty;
-        public string ContextPatch { get; set; } = string.Empty;
         public string ContextText { get; set; } = string.Empty;
         public int ContextStartLine { get; set; }
-        public bool CanAutoMap { get; set; }
+        public string ContextPatch { get; set; } = string.Empty;
+
+        public int StartLine => Side == ReviewSide.Old ? OldStartLine : NewStartLine;
+        public int EndLine => Side == ReviewSide.Old ? OldEndLine : NewEndLine;
+        public bool HasOldRange => Side != ReviewSide.File && OldEndLine > 0;
+        public bool HasNewRange => Side != ReviewSide.File && NewEndLine > 0;
 
         public ReviewAnchor Copy()
         {
@@ -67,100 +62,52 @@ namespace SourceGit.Models
         public string Body { get; set; } = string.Empty;
         public ReviewCommentState State { get; set; } = ReviewCommentState.ToFix;
         public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
-        public string OriginSnapshot { get; set; } = string.Empty;
-        public string OriginPath { get; set; } = string.Empty;
-        public ReviewAnchor OriginAnchor { get; set; } = new();
         public ReviewAnchor Anchor { get; set; } = new();
 
-        public ReviewComment Copy()
-        {
-            var result = (ReviewComment)MemberwiseClone();
-            result.Anchor = Anchor.Copy();
-            result.OriginAnchor = OriginAnchor.Copy();
-            return result;
-        }
+        public bool HasBody => !string.IsNullOrWhiteSpace(Body);
     }
 
     public class ReviewFile
     {
         public string Path { get; set; } = string.Empty;
         public string OldPath { get; set; } = string.Empty;
-        public string Patch { get; set; } = string.Empty;
-        public string OldContent { get; set; } = string.Empty;
-        public string NewContent { get; set; } = string.Empty;
-        public string SourceIdentity { get; set; } = string.Empty;
-        public bool IsUntracked { get; set; }
-        public bool IsLoaded { get; set; } = true;
-        public bool HasReviewWork => Comments.Exists(x => !string.IsNullOrWhiteSpace(x.Body));
-        public bool IsBinary { get; set; }
-        public bool IsOutsideDiff { get; set; }
         public List<ReviewComment> Comments { get; set; } = [];
-        public long ChangeVersion { get; private set; }
-        public long SavedVersion { get; set; } = -1;
 
-        public void MarkChanged()
-        {
-            ChangeVersion++;
-        }
+        public bool HasReviewWork => Comments.Exists(x => x.HasBody);
+        public ReviewComment FileComment => Comments.Find(x => x.Anchor.Side == ReviewSide.File);
     }
 
-    public class ReviewSnapshot
-    {
-        public string Id { get; set; } = string.Empty;
-        public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
-        public ReviewSourceKind Source { get; set; }
-        public string BaseRevision { get; set; } = string.Empty;
-        public string TargetRevision { get; set; } = string.Empty;
-        public string SourceFingerprint { get; set; } = string.Empty;
-        public string Subject { get; set; } = string.Empty;
-        public List<ReviewFile> Files { get; set; } = [];
-        public ConcurrentDictionary<string, string> Contents { get; } = [];
-        public bool IsLoaded { get; set; }
-
-        public void ComputeId()
-        {
-            Id = ComputeContentId();
-        }
-
-        public string ComputeContentId()
-        {
-            var builder = new StringBuilder();
-            builder.Append(Source).Append('\0').Append(BaseRevision).Append('\0').Append(TargetRevision).Append('\0');
-            builder.Append(SourceFingerprint);
-            return Review.ComputeHash(builder.ToString());
-        }
-    }
-
-    public class Review : ObservableObject
+    public class Review
     {
         public const string DirectoryName = "_reviews";
         public const string ArchiveDirectoryName = "_toremove/_reviews";
-        private string _title = string.Empty;
+
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
-        public string Title { get => _title; set => SetProperty(ref _title, value); }
+        public string Title { get; set; } = string.Empty;
         public string GeneralText { get; set; } = string.Empty;
+        public ReviewSourceKind Source { get; set; }
+        public string BaseRevision { get; set; } = string.Empty;
+        public string TargetRevision { get; set; } = string.Empty;
+        public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+        public List<ReviewFile> Files { get; set; } = [];
+
+        public bool IsSaved { get; set; }
         public bool HasGeneralEdits { get; set; }
-        public string LastSnapshotId { get; set; } = string.Empty;
-        public List<ReviewSnapshot> Snapshots { get; set; } = [];
-        public long ChangeVersion { get; private set; }
-        public long SavedVersion { get; set; } = -1;
+        public bool HasContent => HasGeneralEdits || !string.IsNullOrWhiteSpace(GeneralText) || Files.Exists(x => x.HasReviewWork);
 
-        public void MarkChanged()
+        public ReviewFile FindFile(string path)
         {
-            ChangeVersion++;
+            return Files.Find(x => x.Path.Equals(path, StringComparison.Ordinal));
         }
 
-        public static string ComputeHash(string text)
+        public int CountComments(ReviewCommentState state)
         {
-            return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
-        }
-
-        public static bool IsReviewPath(string path)
-        {
-            return path.Equals(DirectoryName, StringComparison.Ordinal) ||
-                path.StartsWith(DirectoryName + "/", StringComparison.Ordinal) ||
-                path.Equals(ArchiveDirectoryName, StringComparison.Ordinal) ||
-                path.StartsWith(ArchiveDirectoryName + "/", StringComparison.Ordinal);
+            var count = 0;
+            foreach (var file in Files)
+                foreach (var comment in file.Comments)
+                    if (comment.HasBody && comment.State == state)
+                        count++;
+            return count;
         }
     }
 }

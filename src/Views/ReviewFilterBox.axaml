@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SourceGit.ViewModels"
+             xmlns:c="using:SourceGit.Converters"
+             x:Class="SourceGit.Views.ReviewFilterBox"
+             x:DataType="vm:ReviewSession"
+             IsVisible="{Binding HasReview, FallbackValue=False}">
+  <ComboBox x:Name="FilterChoices"
+            MinWidth="104"
+            Height="24"
+            VerticalAlignment="Center"
+            ItemsSource="{Binding FilterChoices}"
+            SelectedItem="{Binding Filter, Mode=TwoWay}"
+            ToolTip.Tip="{DynamicResource Text.Reviews.Filter}">
+    <ComboBox.ItemTemplate>
+      <DataTemplate x:DataType="vm:ReviewFileFilter">
+        <TextBlock Text="{Binding Converter={x:Static c:ReviewConverters.ToReviewFilterLabel}}"/>
+      </DataTemplate>
+    </ComboBox.ItemTemplate>
+  </ComboBox>
+</UserControl>

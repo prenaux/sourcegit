@@ -55,9 +55,14 @@ namespace SourceGit.ViewModels
                     OnPropertyChanged();
 
                     if (Content is TextDiffContext ctx && ctx.IsSideBySide() != value)
-                        Content = ctx.SwitchMode();
+                        SetTextContent(ctx.SwitchMode());
                 }
             }
+        }
+
+        public ReviewSession Review
+        {
+            get;
         }
 
         public string FileModeChange
@@ -84,10 +89,11 @@ namespace SourceGit.ViewModels
             private set => SetProperty(ref _unifiedLines, value);
         }
 
-        public DiffContext(string repo, Models.DiffOption option, DiffContext previous = null)
+        public DiffContext(string repo, Models.DiffOption option, DiffContext previous = null, ReviewSession review = null)
         {
             _repo = repo;
             _option = option;
+            Review = review;
 
             if (previous != null)
             {
@@ -97,6 +103,8 @@ namespace SourceGit.ViewModels
                 _unifiedLines = previous._unifiedLines;
                 _info = previous._info;
             }
+
+            Review?.SetDiffSource(this, _content as TextDiffContext);
 
             if (string.IsNullOrEmpty(_option.OrgPath) || _option.OrgPath == "/dev/null")
                 Title = _option.Path;
@@ -172,8 +180,16 @@ namespace SourceGit.ViewModels
                 }
 
                 if (ctx.IsSideBySide() != UseSideBySide)
-                    Content = ctx.SwitchMode();
+                    SetTextContent(ctx.SwitchMode());
             }
+        }
+
+        private void SetTextContent(TextDiffContext content)
+        {
+            // A page can have a review session without an open review, for example a compare with the worktree.
+            content.Review = Review is { HasReview: true } ? Review : null;
+            Content = content;
+            Review?.AttachDiff(this, content);
         }
 
         private void LoadContent()
@@ -310,14 +326,15 @@ namespace SourceGit.ViewModels
                         IsTextDiff = true;
 
                         if (Preferences.Instance.UseSideBySideDiff)
-                            Content = new TwoSideTextDiff(_option, cur, _content as TextDiffContext);
+                            SetTextContent(new TwoSideTextDiff(_option, cur, _content as TextDiffContext));
                         else
-                            Content = new CombinedTextDiff(_option, cur, _content as TextDiffContext);
+                            SetTextContent(new CombinedTextDiff(_option, cur, _content as TextDiffContext));
                     }
                     else
                     {
                         IsTextDiff = false;
                         Content = rs;
+                        Review?.AttachDiff(this, null);
                     }
                 });
             });

@@ -16,7 +16,7 @@
 
     <Grid Grid.Column="0" RowDefinitions="26,*,26">
       <!-- Search & Display Mode -->
-      <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
         <TextBox Grid.Column="0"
                  x:Name="CommitChangeSearchBox"
                  Height="26"
@@ -38,7 +38,9 @@
           </TextBox.InnerRightContent>
         </TextBox>
 
-        <v:ChangeViewModeSwitcher Grid.Column="1"
+        <v:ReviewFilterBox Grid.Column="1" Margin="4,0,0,0" DataContext="{Binding Review}"/>
+
+        <v:ChangeViewModeSwitcher Grid.Column="2"
                                   Width="18" Height="18"
                                   Margin="4,0,0,0"
                                   ViewMode="{Binding Source={x:Static vm:Preferences.Instance}, Path=CommitChangeViewMode, Mode=TwoWay}"/>

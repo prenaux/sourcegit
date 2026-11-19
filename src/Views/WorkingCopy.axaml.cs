@@ -31,27 +31,6 @@ namespace SourceGit.Views
                 layout.WorkingCopyLeftWidth = new GridLength(maxLeft, GridUnitType.Pixel);
         }
 
-        private async void OnReviewStaged(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is ViewModels.WorkingCopy model)
-                await model.Repository.StartReviewAsync(Models.ReviewSourceKind.Staged);
-            e.Handled = true;
-        }
-
-        private async void OnReviewUnstaged(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is ViewModels.WorkingCopy model)
-                await model.Repository.StartReviewAsync(Models.ReviewSourceKind.Unstaged);
-            e.Handled = true;
-        }
-
-        private async void OnReviewAllLocal(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is ViewModels.WorkingCopy model)
-                await model.Repository.StartReviewAsync(Models.ReviewSourceKind.AllLocal);
-            e.Handled = true;
-        }
-
         private async void OnOpenAssumeUnchanged(object sender, RoutedEventArgs e)
         {
             var repoView = this.FindAncestorOfType<Repository>();
@@ -71,6 +50,7 @@ namespace SourceGit.Views
                     selectedSingleFolder = node.FullPath;
 
                 var menu = CreateContextMenuForUnstagedChanges(vm, selectedSingleFolder, view);
+                ReviewMenu.PrependFileItems(menu, vm.Review, vm.SelectedUnstaged);
                 view.CreateTreeContextMenu(menu)?.Open(view);
                 e.Handled = true;
             }
@@ -86,6 +66,7 @@ namespace SourceGit.Views
                     selectedSingleFolder = node.FullPath;
 
                 var menu = CreateContextMenuForStagedChanges(vm, selectedSingleFolder, view);
+                ReviewMenu.PrependFileItems(menu, vm.Review, vm.SelectedStaged);
                 view.CreateTreeContextMenu(menu)?.Open(view);
                 e.Handled = true;
             }

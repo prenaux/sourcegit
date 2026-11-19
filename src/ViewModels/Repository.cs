@@ -39,6 +39,11 @@ namespace SourceGit.ViewModels
             get => _uiStates;
         }
 
+        public Reviews Reviews
+        {
+            get => _reviews;
+        }
+
         public Models.GitFlow GitFlow
         {
             get;
@@ -461,10 +466,10 @@ namespace SourceGit.ViewModels
             }
 
             _historyFilterMode = _uiStates.GetHistoryFilterMode();
+            _reviews = new Reviews(this);
             _histories = new Histories(this);
             _workingCopy = new WorkingCopy(this) { CommitMessage = _uiStates.LastCommitMessage };
             _stashesPage = new StashesPage(this);
-            _reviews = new Reviews(this);
             _searchCommitContext = new SearchCommitContext(this);
 
             if (Preferences.Instance.ShowLocalChangesByDefault)
@@ -534,10 +539,17 @@ namespace SourceGit.ViewModels
             _visibleSubmodules = null;
         }
 
-        public async Task StartReviewAsync(Models.ReviewSourceKind source, string baseRevision = "", string targetRevision = "")
+        public void ShowLocalReview(Models.Review review)
         {
-            await _reviews.OpenSourceAsync(source, baseRevision, targetRevision);
-            SelectedViewIndex = 3;
+            _reviews.SetActiveLocalReview(review);
+            _workingCopy.Review.OpenLocal();
+            SelectedViewIndex = 1;
+        }
+
+        public async Task ShowRevisionCompareAsync(string baseRevision, string targetRevision)
+        {
+            SelectedViewIndex = 0;
+            await _histories.CompareRevisionsAsync(baseRevision, targetRevision);
         }
 
         public bool CanCreatePopup()

@@ -1,202 +1,70 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:m="using:SourceGit.Models"
              xmlns:vm="using:SourceGit.ViewModels"
-             xmlns:v="using:SourceGit.Views"
              xmlns:c="using:SourceGit.Converters"
              x:Class="SourceGit.Views.Reviews"
              x:DataType="vm:Reviews">
-  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="0,4,0,0">
-    <WrapPanel Grid.Row="0" Orientation="Horizontal" IsEnabled="{Binding !IsBusy}">
-      <Button Margin="0,0,6,6" Content="{DynamicResource Text.Reviews.UpdateSnapshot}" Command="{Binding UpdateSnapshot}" IsVisible="{Binding SourceChanged}"/>
-      <TextBlock Margin="0,0,6,6" Text="{DynamicResource Text.Reviews.SourceChanged}" IsVisible="{Binding SourceChanged}" VerticalAlignment="Center"/>
-    </WrapPanel>
-
-    <Grid Grid.Row="1" ColumnDefinitions="*,6,*" Margin="0,0,0,6" IsEnabled="{Binding !IsBusy}">
-      <ComboBox Grid.Column="0" ItemsSource="{Binding SavedReviews}" SelectedItem="{Binding SelectedReview, Mode=TwoWay}"
-                PlaceholderText="{DynamicResource Text.Reviews.SavedReviews}" HorizontalAlignment="Stretch">
-        <ComboBox.ItemTemplate>
-          <DataTemplate x:DataType="m:Review">
-            <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"/>
+  <Grid RowDefinitions="*,Auto" Margin="4">
+    <Grid Grid.Row="0" ColumnDefinitions="320,4,*">
+      <ListBox Grid.Column="0"
+               x:Name="ReviewList"
+               Background="{DynamicResource Brush.Contents}"
+               BorderThickness="1" BorderBrush="{DynamicResource Brush.Border2}"
+               ItemsSource="{Binding Items}"
+               SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+               DoubleTapped="OnReviewListDoubleTapped">
+        <ListBox.Styles>
+          <Style Selector="ListBoxItem">
+            <Setter Property="Padding" Value="6,4"/>
+          </Style>
+        </ListBox.Styles>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ReviewListItem">
+            <StackPanel Spacing="1">
+              <TextBlock Text="{Binding Title}" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource Brush.FG2}" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Text="{Binding Counts}" FontSize="11" Foreground="{DynamicResource Brush.FG2}" TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
           </DataTemplate>
-        </ComboBox.ItemTemplate>
-      </ComboBox>
-      <ComboBox Grid.Column="2" ItemsSource="{Binding Snapshots}" SelectedItem="{Binding SelectedSnapshot, Mode=TwoWay}" HorizontalAlignment="Stretch">
-        <ComboBox.ItemTemplate>
-          <DataTemplate x:DataType="m:ReviewSnapshot">
-            <TextBlock Text="{Binding Converter={x:Static c:ReviewConverters.ToSnapshotLabel}}"/>
-          </DataTemplate>
-        </ComboBox.ItemTemplate>
-      </ComboBox>
-    </Grid>
+        </ListBox.ItemTemplate>
+      </ListBox>
 
-    <Grid Grid.Row="2" ColumnDefinitions="260,4,*" IsEnabled="{Binding !IsBusy}">
-      <Grid Grid.Column="0" RowDefinitions="Auto,*,4,*" Margin="0,0,4,0">
-        <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,4">
-          <TextBox x:Name="FileFilterBox"
-                   Height="24"
-                   BorderThickness="1"
-                   CornerRadius="12"
-                   Text="{Binding FileFilter, Mode=TwoWay}"
-                   BorderBrush="{DynamicResource Brush.Border2}"
-                   VerticalContentAlignment="Center"
-                   Watermark="{DynamicResource Text.Reviews.FilterFiles}">
-            <TextBox.InnerLeftContent>
-              <Path Width="14" Height="14"
-                    Margin="6,0,0,0"
-                    Fill="{DynamicResource Brush.FG2}"
-                    Data="{StaticResource Icons.Search}"/>
-            </TextBox.InnerLeftContent>
-            <TextBox.InnerRightContent>
-              <Button Classes="icon_button"
-                      Width="16"
-                      Margin="0,0,6,0"
-                      Click="OnClearFileFilter"
-                      IsVisible="{Binding FileFilter, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                      HorizontalAlignment="Right">
-                <Path Width="14" Height="14"
-                      Margin="0,1,0,0"
-                      Fill="{DynamicResource Brush.FG1}"
-                      Data="{StaticResource Icons.Clear}"/>
-              </Button>
-            </TextBox.InnerRightContent>
-          </TextBox>
-          <Grid ColumnDefinitions="*,Auto">
-            <ComboBox Grid.Column="0" ItemsSource="{Binding ReviewFilterChoices}" SelectedItem="{Binding ReviewFilter, Mode=TwoWay}" HorizontalAlignment="Stretch">
-              <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:ReviewFileFilter">
-                  <TextBlock Text="{Binding Converter={x:Static c:ReviewConverters.ToReviewFilterLabel}}"/>
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-            <v:ChangeViewModeSwitcher Grid.Column="1" Margin="4,0,0,0" ViewMode="{Binding ViewMode, Mode=TwoWay}"/>
-          </Grid>
+      <GridSplitter Grid.Column="1"
+                    MinWidth="1"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                    Background="Transparent"
+                    Focusable="False"/>
+
+      <Grid Grid.Column="2" RowDefinitions="Auto,*">
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,4" IsEnabled="{Binding HasSelection}">
+          <Button x:Name="OpenReviewButton" Classes="flat" Height="24" Padding="8,0" Content="{DynamicResource Text.Reviews.Open}" Click="OnOpenReview"/>
+          <Button x:Name="CopyReviewButton" Classes="flat" Height="24" Padding="8,0" Content="{DynamicResource Text.Reviews.CopyReview}" Click="OnCopyReview"/>
+          <Button x:Name="DeleteReviewButton" Classes="flat" Height="24" Padding="8,0" Content="{DynamicResource Text.Reviews.Delete}" Click="OnDeleteReview"/>
         </StackPanel>
-        <v:ChangeCollectionView x:Name="FileList" Grid.Row="1"
-                                Background="{DynamicResource Brush.Contents}"
-                                Changes="{Binding Changes}"
-                                SelectedChanges="{Binding SelectedChanges, Mode=TwoWay}"
-                                ViewMode="{Binding ViewMode}"
-                                ExpansionState="{Binding ExpansionState}"
-                                EnableCompactFolders="{Binding Source={x:Static vm:Preferences.Instance}, Path=EnableCompactFoldersInChangesTree}"
-                                ContextRequested="OnFilesContextRequested"/>
-        <GridSplitter Grid.Row="2" MinHeight="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                      Background="{DynamicResource Brush.Border0}" Focusable="False"/>
-        <Grid Grid.Row="3" RowDefinitions="Auto,*">
-          <Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Brush.Border0}">
-            <Grid ColumnDefinitions="Auto,*" Height="28">
-              <Path Width="14" Height="14" Margin="8,0,0,0" Fill="{DynamicResource Brush.FG2}" Data="{StaticResource Icons.Message}"/>
-              <TextBlock Grid.Column="1" Foreground="{DynamicResource Brush.FG2}" FontWeight="Bold" Margin="4,0,0,0" VerticalAlignment="Center">
-                <Run Text="{DynamicResource Text.Reviews.Comments}"/>
-                <Run Text="{Binding CommentsCount}"/>
-              </TextBlock>
-            </Grid>
-          </Border>
-          <ListBox x:Name="CommentList" Grid.Row="1" KeyDown="OnCommentsKeyDown"
-                   ItemsSource="{Binding Comments}" SelectedItem="{Binding SelectedComment, Mode=TwoWay}"
-                   Background="{DynamicResource Brush.Contents}">
-            <ListBox.Styles>
-              <Style Selector="ListBoxItem">
-                <Setter Property="MinHeight" Value="40"/>
-                <Setter Property="Padding" Value="4,2"/>
-              </Style>
-            </ListBox.Styles>
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="vm:ReviewCommentItem">
-                <StackPanel Spacing="1">
-                  <TextBlock Text="{Binding FirstLine}" TextTrimming="CharacterEllipsis"/>
-                  <TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource Brush.FG2}" TextTrimming="CharacterEllipsis"/>
-                </StackPanel>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
-        </Grid>
-      </Grid>
-      <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="Transparent"/>
-      <Grid Grid.Column="2">
-        <Grid.RowDefinitions>
-          <RowDefinition Height="Auto"/>
-          <RowDefinition Height="Auto"/>
-          <RowDefinition Height="Auto"/>
-          <RowDefinition Height="5*" MinHeight="120"/>
-          <RowDefinition Height="4"/>
-          <RowDefinition Height="3*" MinHeight="120"/>
-        </Grid.RowDefinitions>
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="4,0,0,4">
-          <Grid Grid.Column="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,8,0">
-            <SelectableTextBlock Grid.Column="0" x:Name="ComparisonLabel" Text="{Binding ComparisonLabel}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-            <TextBlock Grid.Column="1" FontSize="11" Foreground="Green" Margin="8,0,0,0" VerticalAlignment="Center"
-                       Text="{Binding AddedLines, StringFormat=+{0}}"
-                       IsVisible="{Binding AddedLines, Converter={x:Static c:IntConverters.IsGreaterThanZero}}"/>
-            <TextBlock Grid.Column="2" FontSize="11" Foreground="Red" Margin="8,0,0,0" VerticalAlignment="Center"
-                       Text="{Binding DeletedLines, StringFormat=-{0}}"
-                       IsVisible="{Binding DeletedLines, Converter={x:Static c:IntConverters.IsGreaterThanZero}}"/>
-          </Grid>
-          <CheckBox Grid.Column="1" Content="{DynamicResource Text.Reviews.SideBySide}" IsChecked="{Binding UseSideBySide, Mode=TwoWay}" Margin="8,0"/>
-          <Button Grid.Column="2" Classes="icon_button" Width="28" Click="OnGotoFirstChange" IsVisible="{Binding HasTextDiff}" ToolTip.Tip="{DynamicResource Text.Diff.First}">
-            <Path Width="12" Height="12" Data="{StaticResource Icons.Top}"/>
-          </Button>
-          <Button Grid.Column="3" Classes="icon_button" Width="28" Click="OnGotoPrevChange" IsVisible="{Binding HasTextDiff}" ToolTip.Tip="{DynamicResource Text.Diff.Prev}">
-            <Path Width="12" Height="12" Data="{StaticResource Icons.Up}"/>
-          </Button>
-          <TextBlock Grid.Column="4" Text="{Binding Diff.BlockNavigation.Indicator}" VerticalAlignment="Center" Margin="4,0"/>
-          <Button Grid.Column="5" Classes="icon_button" Width="28" Click="OnGotoNextChange" IsVisible="{Binding HasTextDiff}" ToolTip.Tip="{DynamicResource Text.Diff.Next}">
-            <Path Width="12" Height="12" Data="{StaticResource Icons.Down}"/>
-          </Button>
-          <Button Grid.Column="6" Classes="icon_button" Width="28" Click="OnGotoLastChange" IsVisible="{Binding HasTextDiff}" ToolTip.Tip="{DynamicResource Text.Diff.Last}">
-            <Path Width="12" Height="12" Data="{StaticResource Icons.Bottom}"/>
-          </Button>
-          <Button Grid.Column="7" Content="{DynamicResource Text.Reviews.CopyReview}" Command="{Binding CopyReview}" IsEnabled="{Binding HasReview}"/>
-        </Grid>
-        <SelectableTextBlock Grid.Row="1" Margin="4,0,4,4" Text="{Binding SelectedFileFullPath}" TextTrimming="LeadingCharacterEllipsis" ToolTip.Tip="{Binding SelectedFileFullPath}"/>
-        <TextBlock Grid.Row="2" Margin="4,0,4,4" Text="{Binding FileViewNotice}" TextWrapping="Wrap" IsVisible="{Binding FileViewNotice, Converter={x:Static c:StringConverters.IsNotNullOrWhitespace}}"/>
-        <Border Grid.Row="3" BorderBrush="{DynamicResource Brush.Border2}" BorderThickness="1" Background="{DynamicResource Brush.Contents}">
-          <Grid ClipToBounds="True">
-            <ContentControl Content="{Binding Diff}" IsVisible="{Binding HasTextDiff}">
-              <ContentControl.DataTemplates>
-                <DataTemplate x:DataType="vm:TextDiffContext">
-                  <v:TextDiffView SelectedChunk="{Binding SelectedChunk, Mode=OneWay}"/>
-                </DataTemplate>
-              </ContentControl.DataTemplates>
-            </ContentControl>
-            <ScrollViewer IsVisible="{Binding !HasTextDiff}" VerticalScrollBarVisibility="Auto">
-              <StackPanel Margin="12" Spacing="12">
-                <TextBlock Text="{DynamicResource Text.Reviews.NoInlineDiff}" TextWrapping="Wrap" IsVisible="{Binding HasReview}"/>
-              </StackPanel>
-            </ScrollViewer>
-            <v:LoadingIcon Width="32" Height="32" IsVisible="{Binding IsLoadingFile}" IsHitTestVisible="False"/>
-          </Grid>
+
+        <Border Grid.Row="1" BorderThickness="1" BorderBrush="{DynamicResource Brush.Border2}" Background="{DynamicResource Brush.Contents}">
+          <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <SelectableTextBlock x:Name="ReviewText"
+                                 Margin="8"
+                                 Text="{Binding SelectedText}"
+                                 TextWrapping="Wrap"
+                                 FontFamily="{DynamicResource Fonts.Monospace}"/>
+          </ScrollViewer>
         </Border>
-        <GridSplitter Grid.Row="4" x:Name="EditorSplitter" MinHeight="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                      Background="{DynamicResource Brush.Border0}" Focusable="False" IsVisible="{Binding HasReview}"/>
-        <TabControl Grid.Row="5" x:Name="EditorTabs" Margin="0,6,0,0" IsVisible="{Binding HasReview}"
-                    SelectedIndex="{Binding ActiveTabIndex, Mode=TwoWay}">
-          <TabItem Header="{DynamicResource Text.Reviews.Tab.Comment}">
-            <v:ReviewCommentEditor x:Name="CommentEditor" DataContext="{Binding Context}" Margin="0,4,0,0"/>
-          </TabItem>
-          <TabItem Header="{DynamicResource Text.Reviews.Tab.File}">
-            <v:ReviewCommentEditor x:Name="FileCommentEditor" DataContext="{Binding FileContext}" Margin="0,4,0,0"/>
-          </TabItem>
-          <TabItem Header="{DynamicResource Text.Reviews.Tab.General}">
-            <Border Background="{DynamicResource Brush.Contents}" BorderThickness="1" BorderBrush="{DynamicResource Brush.Border2}" CornerRadius="4">
-              <v:CommitMessageTextEditor x:Name="GeneralReviewEditor" CommitMessage="{Binding GeneralReviewMessage, Mode=TwoWay}"
-                                         HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                                         Placeholder="{DynamicResource Text.Reviews.GeneralPlaceholder}"
-                                         SubjectLineBrush="{DynamicResource Brush.Border2}"
-                                         SubjectGuideLength="{Binding Source={x:Static vm:Preferences.Instance}, Path=SubjectGuideLength}"
-                                         Foreground="{DynamicResource Brush.FG1}" FontFamily="{DynamicResource Fonts.Default}"
-                                         FontSize="{Binding Source={x:Static vm:Preferences.Instance}, Path=EditorFontSize}"/>
-            </Border>
-          </TabItem>
-        </TabControl>
       </Grid>
     </Grid>
-    <TextBlock Grid.Row="2" Text="{DynamicResource Text.Reviews.Empty}" IsVisible="{Binding !HasReview}"
-               HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="420" Margin="16"/>
-    <v:LoadingIcon Grid.Row="2" Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsBusy}" IsHitTestVisible="False"/>
-    <Grid Grid.Row="3" ColumnDefinitions="*,Auto" Margin="0,6,0,0">
-      <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
-      <TextBlock Grid.Column="1" Text="{Binding SaveStatus}" Foreground="{DynamicResource Brush.FG2}" Margin="8,0,0,0"/>
-    </Grid>
+
+    <TextBlock Grid.Row="0"
+               Text="{DynamicResource Text.Reviews.Empty}"
+               IsVisible="{Binding Items.Count, Converter={x:Static c:IntConverters.IsZero}}"
+               HorizontalAlignment="Center" VerticalAlignment="Center"
+               TextWrapping="Wrap" MaxWidth="420" Margin="16"
+               Foreground="{DynamicResource Brush.FG2}"/>
+
+    <TextBlock Grid.Row="1"
+               Margin="0,6,0,0"
+               Text="{Binding Status}"
+               TextWrapping="Wrap"
+               IsVisible="{Binding Status, Converter={x:Static c:StringConverters.IsNotNullOrWhitespace}}"/>
   </Grid>
 </UserControl>

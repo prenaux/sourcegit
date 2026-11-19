@@ -328,14 +328,11 @@ namespace SourceGit.Views
                 if (selected.Count > 1)
                 {
                     var menu = CreateContextMenuForMultipleCommits(repo, commits);
-                    if (commits.Count == 2)
-                        AppendReviewAction(menu, repo, Models.ReviewSourceKind.Comparison, commits[0].SHA, commits[1].SHA);
                     menu.Open(CommitListContainer);
                 }
                 else if (selected.Count == 1)
                 {
                     var menu = CreateContextMenuForSingleCommit(repo, commits[0]);
-                    AppendReviewAction(menu, repo, Models.ReviewSourceKind.Commit, string.Empty, commits[0].SHA);
                     menu.Open(CommitListContainer);
                 }
             }
@@ -466,18 +463,6 @@ namespace SourceGit.Views
             }
         }
 
-        private static void AppendReviewAction(ContextMenu menu, ViewModels.Repository repository, Models.ReviewSourceKind source, string baseRevision, string targetRevision)
-        {
-            menu.Items.Add(new MenuItem { Header = "-" });
-            var item = new MenuItem { Header = App.Text("Reviews.ReviewChanges"), Icon = App.CreateMenuIcon("Icons.Compare") };
-            item.Click += async (_, e) =>
-            {
-                await repository.StartReviewAsync(source, baseRevision, targetRevision);
-                e.Handled = true;
-            };
-            menu.Items.Add(item);
-        }
-
         private ContextMenu CreateContextMenuForMultipleCommits(ViewModels.Repository repo, List<Models.Commit> selected)
         {
             var canCherryPick = true;
@@ -532,10 +517,42 @@ namespace SourceGit.Views
                     menu.Items.Add(new MenuItem() { Header = "-" });
             }
 
+            // The default entry saves one patch that equals the compare shown for the selection.
+            var compare = (DataContext as ViewModels.Histories)?.DetailContext as ViewModels.RevisionCompare;
             var saveToPatch = new MenuItem();
             saveToPatch.Icon = App.CreateMenuIcon("Icons.Save");
             saveToPatch.Header = App.Text("CommitCM.SaveAsPatch");
+            saveToPatch.IsEnabled = compare is { CanSaveAsPatch: true, IsLoading: false };
             saveToPatch.Click += async (_, e) =>
+            {
+                var storageProvider = TopLevel.GetTopLevel(this)?.StorageProvider;
+                if (storageProvider == null)
+                    return;
+
+                var options = new FilePickerSaveOptions();
+                options.Title = App.Text("CommitCM.SaveAsPatch");
+                options.DefaultExtension = ".patch";
+                options.FileTypeChoices = [new FilePickerFileType("Patch File") { Patterns = ["*.patch"] }];
+
+                try
+                {
+                    var storageFile = await storageProvider.SaveFilePickerAsync(options);
+                    if (storageFile != null)
+                        await compare.SaveChangesAsPatchAsync(null, storageFile.Path.LocalPath);
+                }
+                catch (Exception exception)
+                {
+                    App.RaiseException(repo.FullPath, $"Failed to save as patch: {exception.Message}");
+                }
+
+                e.Handled = true;
+            };
+            menu.Items.Add(saveToPatch);
+
+            var saveToPatches = new MenuItem();
+            saveToPatches.Icon = App.CreateMenuIcon("Icons.Save");
+            saveToPatches.Header = App.Text("CommitCM.SaveAsPatchPerCommit");
+            saveToPatches.Click += async (_, e) =>
             {
                 var storageProvider = TopLevel.GetTopLevel(this)?.StorageProvider;
                 if (storageProvider == null)
@@ -568,7 +585,7 @@ namespace SourceGit.Views
 
                 e.Handled = true;
             };
-            menu.Items.Add(saveToPatch);
+            menu.Items.Add(saveToPatches);
             menu.Items.Add(new MenuItem() { Header = "-" });
 
             var copyInfos = new MenuItem();

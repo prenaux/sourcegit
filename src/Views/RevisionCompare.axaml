@@ -75,7 +75,7 @@
 
       <Grid Grid.Column="0" RowDefinitions="26,*,26">
         <!-- Search & Display Mode -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,18">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,18">
           <TextBox Grid.Column="0"
                    x:Name="RevisionCompareChangeSearchBox"
                    Height="26"
@@ -97,7 +97,9 @@
             </TextBox.InnerRightContent>
           </TextBox>
 
-          <v:ChangeViewModeSwitcher Grid.Column="1"
+          <v:ReviewFilterBox Grid.Column="1" Margin="4,0,0,0" DataContext="{Binding Review}"/>
+
+          <v:ChangeViewModeSwitcher Grid.Column="2"
                                     Width="14" Height="14"
                                     HorizontalAlignment="Right"
                                     ViewMode="{Binding Source={x:Static vm:Preferences.Instance}, Path=CommitChangeViewMode, Mode=TwoWay}"/>

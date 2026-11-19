@@ -196,14 +196,14 @@ namespace SourceGit.Views
             public override void Render(DrawingContext context)
             {
                 var presenter = this.FindAncestorOfType<ThemedTextDiffPresenter>();
-                if (presenter?.DataContext is not ViewModels.TextDiffContext { Review: { } review } || TextView is not { VisualLinesValid: true } view)
+                if (presenter?.DataContext is not ViewModels.TextDiffContext { Review: { } review } diff || TextView is not { VisualLinesValid: true } view)
                     return;
 
                 var lines = presenter.GetLines();
                 foreach (var line in view.VisualLines)
                 {
                     var index = line.FirstDocumentLine.LineNumber - 1;
-                    if (index < 0 || index >= lines.Count || review.FindComment(lines[index], presenter.GetReviewPane()) == null)
+                    if (index < 0 || index >= lines.Count || review.FindComment(diff, lines[index], presenter.GetReviewPane()) == null)
                         continue;
                     var y = line.GetTextLineVisualYPosition(line.TextLines[0], VisualYPosition.LineMiddle) - view.VerticalOffset;
                     context.DrawEllipse(Brushes.DodgerBlue, null, new Point(7, y), 3, 3);
@@ -215,7 +215,7 @@ namespace SourceGit.Views
                 if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
                     return;
                 var presenter = this.FindAncestorOfType<ThemedTextDiffPresenter>();
-                if (presenter?.DataContext is not ViewModels.TextDiffContext { Review: { } review } || TextView is not { VisualLinesValid: true } view)
+                if (presenter?.DataContext is not ViewModels.TextDiffContext { Review: { } review } context || TextView is not { VisualLinesValid: true } view)
                     return;
 
                 var lines = presenter.GetLines();
@@ -229,7 +229,7 @@ namespace SourceGit.Views
                     var bottom = line.GetTextLineVisualYPosition(line.TextLines[^1], VisualYPosition.LineBottom) - view.VerticalOffset;
                     if (y < top || y >= bottom)
                         continue;
-                    var comment = review.FindComment(lines[index], presenter.GetReviewPane());
+                    var comment = review.FindComment(context, lines[index], presenter.GetReviewPane());
                     if (comment != null)
                     {
                         this.FindAncestorOfType<TextDiffView>()?.RememberPresenter(presenter);
@@ -319,8 +319,8 @@ namespace SourceGit.Views
                         }
                     }
 
-                    if (_presenter.DataContext is ViewModels.TextDiffContext { Review: { } review } &&
-                        review.IsSelectedLine(info, _presenter.GetReviewPane()))
+                    if (_presenter.DataContext is ViewModels.TextDiffContext { Review: { } review } context &&
+                        review.IsActiveLine(context, info, _presenter.GetReviewPane()))
                         drawingContext.DrawRectangle(null, new Pen(Brushes.DodgerBlue), new Rect(0, startY, width, endY - startY));
 
                     if (changeBlock == null)
@@ -684,12 +684,13 @@ namespace SourceGit.Views
             }
         }
 
-        private ViewModels.ReviewDiffContext _reviewContext;
+        private ViewModels.ReviewSession _reviewContext;
+        private bool _isRevealingComment;
 
-        private ViewModels.ReviewPane GetReviewPane()
+        public Models.ReviewPane GetReviewPane()
         {
             return DataContext is ViewModels.TwoSideTextDiff ?
-                IsOld ? ViewModels.ReviewPane.Old : ViewModels.ReviewPane.New : ViewModels.ReviewPane.Combined;
+                IsOld ? Models.ReviewPane.Old : Models.ReviewPane.New : Models.ReviewPane.Combined;
         }
 
         private void ConnectReviewContext()
@@ -733,12 +734,13 @@ namespace SourceGit.Views
             if (chunk == null)
                 return;
             this.FindAncestorOfType<TextDiffView>()?.RememberPresenter(this);
-            review.OpenComment(context.Data, chunk, !selection.IsEmpty);
+            review.OpenComment(context, chunk, !selection.IsEmpty);
         }
 
-        public void MoveReviewBoundary(ViewModels.BlockNavigationDirection direction, KeyModifiers modifiers)
+        // Moves the caret to the next start or end of a block of changed lines. Shift extends the selection to it.
+        public void MoveCaretToBoundary(ViewModels.BlockNavigationDirection direction, KeyModifiers modifiers)
         {
-            if (DataContext is not ViewModels.TextDiffContext { Review: { } review } || BlockNavigation == null)
+            if (DataContext is not ViewModels.TextDiffContext || BlockNavigation == null)
                 return;
             var caret = CaretOffset;
             var anchor = TextArea.Selection.IsEmpty ? caret : Document.GetOffset(TextArea.Selection.StartPosition.Location);
@@ -750,33 +752,67 @@ namespace SourceGit.Views
                 TextArea.Selection = Selection.Create(TextArea, anchor, next);
             else
                 TextArea.ClearSelection();
-            TextArea.Focus();
             TextArea.Caret.BringCaretToView();
-            UpdateReviewSelectionChunk();
+        }
+
+        public void GotoComment(ViewModels.BlockNavigationDirection direction)
+        {
+            if (DataContext is not ViewModels.TextDiffContext { Review: { } review } context)
+                return;
+
+            var lines = GetLines();
+            var pane = GetReviewPane();
+            var caret = TextArea.Caret.Line - 1;
+            var isNext = direction == ViewModels.BlockNavigationDirection.Next;
+            Models.ReviewComment target = null;
+            var targetIndex = -1;
+            foreach (var comment in review.GetLocatedComments(context))
+            {
+                var index = Models.ReviewAnchors.FindFirstLineIndex(comment.Anchor, lines, pane);
+                if (index < 0 || (isNext ? index <= caret : index >= caret))
+                    continue;
+                if (target != null && (isNext ? index >= targetIndex : index <= targetIndex))
+                    continue;
+
+                target = comment;
+                targetIndex = index;
+            }
+
+            if (target != null)
+                review.ShowComment(target);
+        }
+
+        public void RevealComment(Models.ReviewComment comment)
+        {
+            var index = Models.ReviewAnchors.FindFirstLineIndex(comment.Anchor, GetLines(), GetReviewPane());
+            if (index < 0)
+                return;
+
+            // The review already targets this comment. The caret move must not select another comment on the same line.
+            _isRevealingComment = true;
+            TextArea.ClearSelection();
+            TextArea.Caret.Line = index + 1;
+            TextArea.Caret.Column = 1;
+            _isRevealingComment = false;
+            ScrollToLine(index + 1);
         }
 
         private void OnReviewSelectionChanged(object sender, EventArgs e)
         {
-            if (_reviewContext == null)
-                return;
-            this.FindAncestorOfType<TextDiffView>()?.RememberPresenter(this);
-            UpdateReviewSelectionChunk();
+            TrackReviewTarget();
         }
 
-        private void UpdateReviewSelectionChunk(bool notifyTarget = true)
+        private void TrackReviewTarget()
         {
-            var view = TextArea.TextView;
-            if (view.VisualLinesValid && view.VisualLines.Count > 0)
-            {
-                var line = view.GetVisualLine(TextArea.Caret.Line);
-                var y = line == null ? view.VerticalOffset : line.GetTextLineVisualYPosition(line.TextLines[0], VisualYPosition.LineTop);
-                UpdateSelectedChunk(y);
-            }
-            if (!notifyTarget || _reviewContext == null)
+            if (_isRevealingComment || DataContext is not ViewModels.TextDiffContext { Review: { } review } context)
                 return;
+
             var target = CreateCaretReviewChunk();
-            if (target != null)
-                _reviewContext.NotifySelectionMoved(target, !TextArea.Selection.IsEmpty);
+            if (target == null)
+                return;
+
+            this.FindAncestorOfType<TextDiffView>()?.RememberPresenter(this);
+            review.TrackComment(context, target, !TextArea.Selection.IsEmpty);
         }
 
         private ViewModels.TextDiffSelectedChunk CreateCaretReviewChunk()
@@ -814,9 +850,35 @@ namespace SourceGit.Views
                 if (e.Key == Key.C)
                 {
                     if (hasShift)
-                        await CopyAsPatchAsync(null, null);
+                        await CopyAsPatchAsync(null);
                     else
                         await CopyWithoutIndicatorsAsync();
+                    e.Handled = true;
+                }
+            }
+
+            // These shortcuts use Ctrl on every platform, like the toolbar buttons of the diff view.
+            var direction = e.Key switch
+            {
+                Key.Up => ViewModels.BlockNavigationDirection.Prev,
+                Key.Down => ViewModels.BlockNavigationDirection.Next,
+                _ => (ViewModels.BlockNavigationDirection?)null,
+            };
+            if (!e.Handled && e.KeyModifiers.HasFlag(KeyModifiers.Control))
+            {
+                if (direction != null && !hasAlt)
+                {
+                    MoveCaretToBoundary(direction.Value, e.KeyModifiers);
+                    e.Handled = true;
+                }
+                else if (direction != null && !hasShift && _reviewContext != null)
+                {
+                    GotoComment(direction.Value);
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.M && !hasAlt && !hasShift && _reviewContext != null)
+                {
+                    AddReviewComment();
                     e.Handled = true;
                 }
             }
@@ -828,8 +890,7 @@ namespace SourceGit.Views
         private void OnTextAreaCaretPositionChanged(object sender, EventArgs e)
         {
             BlockNavigation.UpdateByCaretPosition(TextArea?.Caret?.Line ?? 0);
-            if (_reviewContext != null)
-                UpdateReviewSelectionChunk();
+            TrackReviewTarget();
         }
 
         private void OnTextViewContextRequested(object sender, ContextRequestedEventArgs e)
@@ -871,7 +932,7 @@ namespace SourceGit.Views
                 copyAsPatch.Tag = isMacOS ? "⌘+⇧+C" : "Ctrl+Shift+C";
                 copyAsPatch.Click += async (_, ev) =>
                 {
-                    await CopyAsPatchAsync(diff, null);
+                    await CopyAsPatchAsync(diff);
                     ev.Handled = true;
                 };
                 menu.Items.Add(copyAsPatch);
@@ -886,30 +947,6 @@ namespace SourceGit.Views
                 };
                 menu.Items.Add(openWithMerger);
                 AddCustomActionsToContextMenu(menu, diff.FindRepository(), newLine);
-            }
-            else if (DataContext is ViewModels.TextDiffContext review && review.Review?.Owner is { } reviews)
-            {
-                var copyAsPatch = new MenuItem();
-                copyAsPatch.Header = App.Text("FileCM.CopyAsPatch");
-                copyAsPatch.Icon = App.CreateMenuIcon("Icons.Copy");
-                copyAsPatch.Tag = isMacOS ? "⌘+⇧+C" : "Ctrl+Shift+C";
-                copyAsPatch.Click += async (_, ev) =>
-                {
-                    await CopyAsPatchAsync(null, reviews);
-                    ev.Handled = true;
-                };
-                menu.Items.Add(copyAsPatch);
-
-                var openWithMerger = new MenuItem();
-                openWithMerger.Header = App.Text("OpenInExternalMergeTool");
-                openWithMerger.Icon = App.CreateMenuIcon("Icons.OpenWith");
-                openWithMerger.Click += (_, ev) =>
-                {
-                    new Commands.DiffTool(reviews.RepositoryPath, review.Option, oldLine, newLine).Open();
-                    ev.Handled = true;
-                };
-                menu.Items.Add(openWithMerger);
-                AddCustomActionsToContextMenu(menu, reviews.Owner, newLine);
             }
 
             return menu;
@@ -939,17 +976,11 @@ namespace SourceGit.Views
             }
         }
 
-        private async Task CopyAsPatchAsync(ViewModels.DiffContext diff, ViewModels.Reviews reviews)
+        private async Task CopyAsPatchAsync(ViewModels.DiffContext diff)
         {
             if (!TextArea.Selection.IsEmpty)
             {
                 await CopySelectedAsPatchAsync();
-                return;
-            }
-
-            if (reviews != null)
-            {
-                await reviews.CopyFilePatchAsync(DataContext is ViewModels.TextDiffContext ctx ? ctx.Option.Path : null);
                 return;
             }
 
@@ -980,11 +1011,7 @@ namespace SourceGit.Views
                 {
                     var rect = new Rect(0, chunk.Y, Bounds.Width, chunk.Height);
                     if (rect.Contains(e.GetPosition(this)))
-                    {
-                        if (ctx.IsReview)
-                            TrySetChunk(chunk);
                         return;
-                    }
                 }
 
                 UpdateSelectedChunk(e.GetPosition(view).Y + view.VerticalOffset);
@@ -1022,8 +1049,6 @@ namespace SourceGit.Views
             if (DataContext is not ViewModels.TextDiffContext ctx)
                 return;
 
-            if (ctx.IsReview && ctx.IsSideBySide() && !IsOld)
-                return;
             if (ctx.IsSideBySide() && !IsOld)
                 return;
 
@@ -1051,28 +1076,10 @@ namespace SourceGit.Views
             }
 
             ctx.DisplayRange = new ViewModels.TextLineRange(start, start + count);
-            if (ctx.IsReview)
-                UpdateReviewSelectionChunk(false);
-        }
-
-        protected void TrimReviewSelectionEnd(ref int start, ref int end)
-        {
-            if (DataContext is not ViewModels.TextDiffContext { IsReview: true })
-                return;
-            var selection = TextArea.Selection;
-            var last = selection.StartPosition.Line > selection.EndPosition.Line ? selection.StartPosition : selection.EndPosition;
-            if (end > start && last.Line - 1 == end && last.Column == 1)
-                end--;
         }
 
         protected void TrySetChunk(ViewModels.TextDiffSelectedChunk chunk)
         {
-            if (DataContext is ViewModels.TextDiffContext { Review: { } review } context && chunk != null)
-            {
-                var existing = TextArea.Selection.IsEmpty && chunk.StartIdx >= 0 && chunk.StartIdx < context.Data.Lines.Count ?
-                    review.FindComment(context.Data.Lines[chunk.StartIdx], GetReviewPane()) : null;
-                review.SetCommentTarget(existing, !TextArea.Selection.IsEmpty);
-            }
             if (ViewModels.TextDiffSelectedChunk.IsChanged(SelectedChunk, chunk))
                 SetCurrentValue(SelectedChunkProperty, chunk);
         }
@@ -1434,14 +1441,12 @@ namespace SourceGit.Views
 
                 if (startIdx > endIdx)
                     (startIdx, endIdx) = (endIdx, startIdx);
-                TrimReviewSelectionEnd(ref startIdx, ref endIdx);
 
                 var hasChanges = false;
                 for (var i = startIdx; i <= endIdx; i++)
                 {
                     var line = diff.Lines[i];
-                    if (line.Type == Models.TextDiffLineType.Added || line.Type == Models.TextDiffLineType.Deleted ||
-                        (combined.IsReview && line.Type == Models.TextDiffLineType.Normal))
+                    if (line.Type == Models.TextDiffLineType.Added || line.Type == Models.TextDiffLineType.Deleted)
                     {
                         hasChanges = true;
                         break;
@@ -1500,12 +1505,7 @@ namespace SourceGit.Views
                     return;
                 }
 
-                if (combined.IsReview && diff.Lines[lineIdx].Type is Models.TextDiffLineType.Indicator or Models.TextDiffLineType.None)
-                {
-                    TrySetChunk(null);
-                    return;
-                }
-                var (startIdx, endIdx) = combined.IsReview ? (lineIdx, lineIdx) : combined.FindRangeByIndex(diff.Lines, lineIdx);
+                var (startIdx, endIdx) = combined.FindRangeByIndex(diff.Lines, lineIdx);
                 if (startIdx == -1)
                 {
                     TrySetChunk(null);
@@ -1632,14 +1632,12 @@ namespace SourceGit.Views
 
                 if (startIdx > endIdx)
                     (startIdx, endIdx) = (endIdx, startIdx);
-                TrimReviewSelectionEnd(ref startIdx, ref endIdx);
 
                 var hasChanges = false;
                 for (var i = startIdx; i <= endIdx; i++)
                 {
                     var line = lines[i];
-                    if (line.Type == Models.TextDiffLineType.Added || line.Type == Models.TextDiffLineType.Deleted ||
-                        (diff.IsReview && line.Type == Models.TextDiffLineType.Normal))
+                    if (line.Type == Models.TextDiffLineType.Added || line.Type == Models.TextDiffLineType.Deleted)
                     {
                         hasChanges = true;
                         break;
@@ -1699,12 +1697,7 @@ namespace SourceGit.Views
                     return;
                 }
 
-                if (diff.IsReview && lines[lineIdx].Type is Models.TextDiffLineType.Indicator or Models.TextDiffLineType.None)
-                {
-                    TrySetChunk(null);
-                    return;
-                }
-                var (startIdx, endIdx) = diff.IsReview ? (lineIdx, lineIdx) : diff.FindRangeByIndex(lines, lineIdx);
+                var (startIdx, endIdx) = diff.FindRangeByIndex(lines, lineIdx);
                 if (startIdx == -1)
                 {
                     TrySetChunk(null);
@@ -1721,16 +1714,8 @@ namespace SourceGit.Views
                     endLine.GetTextLineVisualYPosition(endLine.TextLines[^1], VisualYPosition.LineBottom) - view.VerticalOffset :
                     view.Bounds.Height;
 
-                if (diff.IsReview)
-                {
-                    diff.GetCombinedRangeForSingleSide(ref startIdx, ref endIdx, IsOld);
-                    TrySetChunk(new(rectStartY, rectEndY - rectStartY, startIdx, endIdx, false, IsOld));
-                }
-                else
-                {
-                    diff.GetCombinedRangeForBothSides(ref startIdx, ref endIdx, IsOld);
-                    TrySetChunk(new(rectStartY, rectEndY - rectStartY, startIdx, endIdx, true, false));
-                }
+                diff.GetCombinedRangeForBothSides(ref startIdx, ref endIdx, IsOld);
+                TrySetChunk(new(rectStartY, rectEndY - rectStartY, startIdx, endIdx, true, false));
             }
         }
 
@@ -1942,8 +1927,7 @@ namespace SourceGit.Views
             {
                 if (SelectedChunk is { } chunk)
                 {
-                    var top = DataContext is ViewModels.TextDiffContext { IsReview: true } ?
-                        Math.Clamp(chunk.Y, 0, Math.Max(0, Bounds.Height - Popup.DesiredSize.Height)) : chunk.Y + 4;
+                    var top = chunk.Y + 4;
                     var right = (chunk.Combined || !chunk.IsOldSide) ? 26 : (Bounds.Width * 0.5f) + 26;
                     Popup.Margin = new Thickness(0, top, right, 0);
                     Popup.IsVisible = true;
@@ -1959,12 +1943,12 @@ namespace SourceGit.Views
         {
             base.OnPointerExited(e);
 
-            if (DataContext is ViewModels.TextDiffContext ctx && (!ctx.IsReview ||
-                !this.GetVisualDescendants().OfType<ThemedTextDiffPresenter>().Any(x => !x.TextArea.Selection.IsEmpty)))
+            if (DataContext is ViewModels.TextDiffContext ctx)
                 ctx.SelectedChunk = null;
         }
 
         private ThemedTextDiffPresenter _activePresenter;
+        private ViewModels.ReviewSession _review;
 
         public void RememberPresenter(ThemedTextDiffPresenter presenter) => _activePresenter = presenter;
 
@@ -1980,6 +1964,60 @@ namespace SourceGit.Views
         {
             base.OnDataContextChanged(e);
             _activePresenter = null;
+            ConnectReview();
+        }
+
+        protected override void OnLoaded(RoutedEventArgs e)
+        {
+            base.OnLoaded(e);
+            ConnectReview();
+        }
+
+        protected override void OnUnloaded(RoutedEventArgs e)
+        {
+            base.OnUnloaded(e);
+            DisconnectReview();
+        }
+
+        private void ConnectReview()
+        {
+            DisconnectReview();
+            _review = (DataContext as ViewModels.TextDiffContext)?.Review;
+            if (_review == null)
+                return;
+
+            _review.RevealRequested += OnRevealRequested;
+            _review.FocusDiffRequested += OnFocusDiffRequested;
+        }
+
+        private void DisconnectReview()
+        {
+            if (_review == null)
+                return;
+
+            _review.RevealRequested -= OnRevealRequested;
+            _review.FocusDiffRequested -= OnFocusDiffRequested;
+            _review = null;
+        }
+
+        private void OnRevealRequested(object sender, Models.ReviewComment comment)
+        {
+            if (DataContext is not ViewModels.TextDiffContext context || !_review.IsCurrentDiff(context))
+                return;
+
+            var presenter = this.GetVisualDescendants().OfType<ThemedTextDiffPresenter>().FirstOrDefault(x =>
+                context is not ViewModels.TwoSideTextDiff || x.IsOld == (comment.Anchor.Side == Models.ReviewSide.Old));
+            if (presenter == null)
+                return;
+
+            RememberPresenter(presenter);
+            presenter.RevealComment(comment);
+        }
+
+        private void OnFocusDiffRequested(object sender, EventArgs e)
+        {
+            if (DataContext is ViewModels.TextDiffContext context && _review.IsCurrentDiff(context))
+                FindActivePresenter()?.TextArea.Focus();
         }
 
         private void OnAddReviewComment(object sender, RoutedEventArgs e)
@@ -1987,16 +2025,18 @@ namespace SourceGit.Views
             if (DataContext is ViewModels.TextDiffContext { Review: { } review, SelectedChunk: { } chunk } context)
             {
                 var presenter = this.GetVisualDescendants().OfType<ThemedTextDiffPresenter>().FirstOrDefault(x =>
-                    context is not ViewModels.TwoSideTextDiff || x.IsOld == chunk.IsOldSide);
-                RememberPresenter(presenter);
-                review.OpenComment(context.Data, chunk, review.HasSelection);
+                    !x.TextArea.Selection.IsEmpty && (chunk.Combined || x.IsOld == chunk.IsOldSide));
+                if (presenter != null)
+                    presenter.AddReviewComment();
+                else
+                    review.OpenComment(context, context.TrimChunkToChanges(chunk), false);
             }
             e.Handled = true;
         }
 
         private async void OnStageChunk(object _1, RoutedEventArgs _2)
         {
-            if (DataContext is not ViewModels.TextDiffContext { IsReview: false, SelectedChunk: { } chunk, Data: { } diff, Option: { IsUnstaged: true, WorkingCopyChange: { } change } } vm)
+            if (DataContext is not ViewModels.TextDiffContext { SelectedChunk: { } chunk, Data: { } diff, Option: { IsUnstaged: true, WorkingCopyChange: { } change } } vm)
                 return;
 
             var selection = diff.MakeSelection(chunk.StartIdx + 1, chunk.EndIdx + 1, chunk.Combined, chunk.IsOldSide);
@@ -2034,7 +2074,7 @@ namespace SourceGit.Views
 
         private async void OnUnstageChunk(object _1, RoutedEventArgs _2)
         {
-            if (DataContext is not ViewModels.TextDiffContext { IsReview: false, SelectedChunk: { } chunk, Data: { } diff, Option: { IsUnstaged: false, WorkingCopyChange: { } change } } vm)
+            if (DataContext is not ViewModels.TextDiffContext { SelectedChunk: { } chunk, Data: { } diff, Option: { IsUnstaged: false, WorkingCopyChange: { } change } } vm)
                 return;
 
             var selection = diff.MakeSelection(chunk.StartIdx + 1, chunk.EndIdx + 1, chunk.Combined, chunk.IsOldSide);
@@ -2065,7 +2105,7 @@ namespace SourceGit.Views
 
         private async void OnDiscardChunk(object _1, RoutedEventArgs _2)
         {
-            if (DataContext is not ViewModels.TextDiffContext { IsReview: false, SelectedChunk: { } chunk, Data: { } diff, Option: { IsUnstaged: true, WorkingCopyChange: { } change } } vm)
+            if (DataContext is not ViewModels.TextDiffContext { SelectedChunk: { } chunk, Data: { } diff, Option: { IsUnstaged: true, WorkingCopyChange: { } change } } vm)
                 return;
 
             var selection = diff.MakeSelection(chunk.StartIdx + 1, chunk.EndIdx + 1, chunk.Combined, chunk.IsOldSide);

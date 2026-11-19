@@ -43,7 +43,7 @@ namespace SourceGit.ViewModels
                     _sharedData.ActiveTabIndex = value;
 
                     if (value == 1 && DiffContext == null && _selectedChanges is { Count: 1 })
-                        DiffContext = new DiffContext(_repo.FullPath, new Models.DiffOption(_commit, _selectedChanges[0]));
+                        DiffContext = new DiffContext(_repo.FullPath, new Models.DiffOption(_commit, _selectedChanges[0]), null, _review);
                 }
             }
         }
@@ -104,10 +104,11 @@ namespace SourceGit.ViewModels
             {
                 if (SetProperty(ref _selectedChanges, value))
                 {
+                    _review?.SelectFile(value is { Count: 1 } ? value[0] : null);
                     if (ActiveTabIndex != 1 || value is not { Count: 1 })
                         DiffContext = null;
                     else
-                        DiffContext = new DiffContext(_repo.FullPath, new Models.DiffOption(_commit, value[0]), _diffContext);
+                        DiffContext = new DiffContext(_repo.FullPath, new Models.DiffOption(_commit, value[0]), _diffContext, _review);
                 }
             }
         }
@@ -168,10 +169,16 @@ namespace SourceGit.ViewModels
             set => SetProperty(ref _scrollOffset, value);
         }
 
-        public CommitDetail(Repository repo, CommitDetailSharedData sharedData)
+        public ReviewSession Review
+        {
+            get => _review;
+        }
+
+        public CommitDetail(Repository repo, CommitDetailSharedData sharedData, ReviewSession review = null)
         {
             _repo = repo;
             _sharedData = sharedData ?? new CommitDetailSharedData();
+            _review = review;
             WebLinks = Models.CommitLink.Get(repo.Remotes);
         }
 
@@ -507,11 +514,14 @@ namespace SourceGit.ViewModels
 
             if (_commit == null)
             {
+                _review?.Close();
                 Changes = [];
                 VisibleChanges = [];
                 SelectedChanges = null;
                 return;
             }
+
+            _review?.Open(Models.ReviewSourceKind.Commit, _commit.FirstParentToCompare, _commit.SHA, _commit.Subject);
 
             if (_cancellationSource is { IsCancellationRequested: false })
                 _cancellationSource.Cancel();
@@ -578,6 +588,12 @@ namespace SourceGit.ViewModels
                 {
                     Dispatcher.UIThread.Post(() =>
                     {
+                        if (_review != null)
+                        {
+                            _review.SetChanges(changes);
+                            visible = _review.FilterChanges(visible);
+                        }
+
                         Changes = changes;
                         VisibleChanges = visible;
 
@@ -641,23 +657,26 @@ namespace SourceGit.ViewModels
             return inlines;
         }
 
+        public void ApplyReviewFilter()
+        {
+            if (_changes != null)
+                RefreshVisibleChanges();
+        }
+
         private void RefreshVisibleChanges()
         {
-            if (string.IsNullOrEmpty(_searchChangeFilter))
+            var visible = _changes;
+            if (!string.IsNullOrEmpty(_searchChangeFilter))
             {
-                VisibleChanges = _changes;
-            }
-            else
-            {
-                var visible = new List<Models.Change>();
+                visible = new List<Models.Change>();
                 foreach (var c in _changes)
                 {
                     if (c.Path.Contains(_searchChangeFilter, StringComparison.OrdinalIgnoreCase))
                         visible.Add(c);
                 }
-
-                VisibleChanges = visible;
             }
+
+            VisibleChanges = _review == null ? visible : _review.FilterChanges(visible);
         }
 
         private void RefreshRevisionSearchSuggestion()
@@ -790,6 +809,7 @@ namespace SourceGit.ViewModels
 
         private Repository _repo = null;
         private CommitDetailSharedData _sharedData = null;
+        private ReviewSession _review = null;
         private Models.Commit _commit = null;
         private Models.CommitFullMessage _fullMessage = null;
         private Models.CommitSignInfo _signInfo = null;

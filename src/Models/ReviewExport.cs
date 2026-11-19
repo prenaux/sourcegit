@@ -11,44 +11,47 @@ namespace SourceGit.Models
             All,
         }
 
-        public static string CreateText(Review review, ReviewSnapshot snapshot) => CreateText(review, snapshot, CommentScope.Active);
-        public static string CreateDocument(Review review, ReviewSnapshot snapshot) => CreateText(review, snapshot, CommentScope.All);
+        public static string CreateText(Review review) => CreateText(review, CommentScope.Active);
+        public static string CreateDocument(Review review) => CreateText(review, CommentScope.All);
 
-        private static string CreateText(Review review, ReviewSnapshot snapshot, CommentScope scope)
+        private static string CreateText(Review review, CommentScope scope)
         {
             var result = new StringBuilder();
             result.Append("# ").AppendLine(review.Title);
             if (!string.IsNullOrWhiteSpace(review.GeneralText))
                 result.AppendLine().AppendLine(review.GeneralText);
-            result.AppendLine().Append("Source: ").Append(snapshot.Source).Append("; ")
-                .Append(snapshot.BaseRevision).Append(" -> ").AppendLine(snapshot.TargetRevision);
-            foreach (var file in snapshot.Files)
+
+            result.AppendLine().Append("Source: ").Append(review.Source);
+            if (review.Source != ReviewSourceKind.Local)
+                result.Append("; ").Append(review.BaseRevision).Append(" -> ").Append(review.TargetRevision);
+            result.AppendLine();
+
+            foreach (var file in review.Files)
             {
-                var comments = file.Comments.FindAll(x => !string.IsNullOrWhiteSpace(x.Body) &&
+                var comments = file.Comments.FindAll(x => x.HasBody &&
                     (scope == CommentScope.All || x.State is ReviewCommentState.Comment or ReviewCommentState.ToFix));
                 if (comments.Count == 0)
                     continue;
+
                 result.AppendLine().Append("## ").AppendLine(file.Path);
                 foreach (var comment in comments)
                 {
+                    var anchor = comment.Anchor;
                     result.AppendLine().Append("### ").AppendLine(comment.State.ToString().ToLowerInvariant());
                     result.AppendLine().AppendLine(comment.Body);
-                    var attached = comment.Anchor.Attachment == ReviewAttachment.Attached;
-                    var anchor = attached ? comment.Anchor : comment.OriginAnchor;
-                    var path = attached ? anchor.Side == ReviewSide.Old && file.OldPath.Length > 0 ? file.OldPath : file.Path : comment.OriginPath;
-                    result.AppendLine().Append("Location: ").Append(path);
+                    result.AppendLine().Append("Location: ").Append(anchor.Side == ReviewSide.Old && file.OldPath.Length > 0 ? file.OldPath : file.Path);
                     if (anchor.Side != ReviewSide.File)
                         result.Append(" [").Append(anchor.Side).Append(" lines ").Append(anchor.StartLine).Append('-').Append(anchor.EndLine).Append(']');
                     result.AppendLine();
-                    if (!attached)
+
+                    if (anchor.Attachment != ReviewAttachment.Attached)
                     {
-                        result.Append("Attachment: ").AppendLine(comment.Anchor.Attachment.ToString());
-                        result.AppendLine("This comment is not attached to the current diff. The location and code below are its original context.");
-                        result.Append("Original snapshot: ").AppendLine(comment.OriginSnapshot);
+                        result.Append("Attachment: ").AppendLine(anchor.Attachment.ToString());
+                        result.AppendLine("This comment is not attached to the current diff. The location and code below are its last known context.");
                     }
-                    var patch = anchor.ContextPatch.Length > 0 ? anchor.ContextPatch : ReviewPatch.SelectHunks(file.Patch, [anchor]);
-                    if (patch.Length > 0)
-                        AppendBlock(result, "diff", patch);
+
+                    if (anchor.ContextPatch.Length > 0)
+                        AppendBlock(result, "diff", anchor.ContextPatch);
                     else if (anchor.Quote.Length > 0)
                         AppendBlock(result, "text", anchor.Quote);
                 }
